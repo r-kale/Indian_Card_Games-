@@ -18,7 +18,7 @@ export type GameEvent =
   | { type: 'matchOver'; winners: Seat[] }
   | { type: 'vakhaaiCalled'; seat: Seat; bet: number }
   | { type: 'sixCalled'; seat: Seat }
-  | { type: 'hukumRevealed'; suit: Suit }
+  | { type: 'hukumRevealed'; suit: Suit; caller: Seat }
   | { type: 'roundScored'; result: RoundResult };
 
 export interface ClientToServerEvents {

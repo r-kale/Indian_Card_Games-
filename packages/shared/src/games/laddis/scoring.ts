@@ -26,13 +26,15 @@ export function scoreRound(s: LaddisState): RoundResult {
   if (s.mode === 'vakhaai') {
     const { caller, bet } = s.vakhaai!;
     attemptingTeam = teamOf(caller);
-    made = s.tricksTaken[caller] >= 4; // the caller's own tricks only
+    // Only 4 tricks exist in a vakhaai round: the caller must take them all.
+    made = s.tricksTaken[caller] >= 4;
     const callerShuffling = attemptingTeam === s.shufflingTeam;
     delta = callerShuffling ? (made ? -bet : 2 * bet) : made ? bet : -2 * bet;
   } else if (s.mode === 'six') {
-    attemptingTeam = (1 - s.shufflingTeam) as Team;
+    attemptingTeam = teamOf(s.six!.caller);
     made = teamTricks[attemptingTeam] >= 6;
-    delta = made ? SIX_WIN : -SIX_LOSS;
+    const callerShuffling = attemptingTeam === s.shufflingTeam;
+    delta = callerShuffling ? (made ? -SIX_WIN : SIX_LOSS) : made ? SIX_WIN : -SIX_LOSS;
   } else {
     attemptingTeam = s.shufflingTeam;
     made = teamTricks[s.shufflingTeam] >= 4;

@@ -3,7 +3,7 @@ import type { Card, Suit } from '../../core/cards';
 import { makeRng, shuffle } from '../../core/rng';
 import { legalFollows, ledSuit, trickWinner } from '../../core/tricks';
 import { scoreRound } from './scoring';
-import { LaddisError, nextSeat, partnerOf, teamOf, VAKHAAI_BETS } from './types';
+import { LaddisError, nextSeat, partnerOf, VAKHAAI_BETS } from './types';
 import type { LaddisAction, LaddisState, Seat, Team, VakhaaiBet } from './types';
 
 export interface RoundConfig {
@@ -73,9 +73,8 @@ export function legalActions(state: LaddisState, seat: Seat): LaddisAction[] {
   switch (state.phase) {
     case 'vakhaai': {
       if (state.window.turn !== seat) return [];
-      const sample = state.hands[seat][0]!;
       actions.push({ type: 'passVakhaai', seat });
-      actions.push({ type: 'vakhaai', seat, bet: 8, suit: sample.suit });
+      actions.push({ type: 'vakhaai', seat, bet: 8 });
       return actions;
     }
     case 'declaring': {
@@ -93,10 +92,10 @@ export function legalActions(state: LaddisState, seat: Seat): LaddisAction[] {
     case 'playing': {
       if (state.turn !== seat) return [];
       for (const card of legalPlays(state, seat)) actions.push({ type: 'playCard', seat, card });
-      const hukum = state.hukum!;
       const led = ledSuit(state.trick);
       if (
-        !hukum.revealed &&
+        state.hukum !== null &&
+        !state.hukum.revealed &&
         led !== null &&
         !state.hands[seat].some((c) => c.suit === led)
       ) {
@@ -117,8 +116,9 @@ export function legalActions(state: LaddisState, seat: Seat): LaddisAction[] {
 /** Follow suit if possible; a seat that called for the hukum must play it if able. */
 function legalPlays(state: LaddisState, seat: Seat): Card[] {
   const follows = legalFollows(state.hands[seat], state.trick);
-  const hukum = state.hukum!;
+  const hukum = state.hukum;
   if (
+    hukum !== null &&
     state.mustPlayHukum === seat &&
     hukum.revealed &&
     follows.some((c) => c.suit === hukum.suit)
@@ -132,7 +132,7 @@ export function applyAction(state: LaddisState, action: LaddisAction): LaddisSta
   const s: LaddisState = cloneState(state);
   switch (action.type) {
     case 'vakhaai':
-      applyVakhaai(s, action.seat, action.bet, action.suit);
+      applyVakhaai(s, action.seat, action.bet);
       break;
     case 'passVakhaai':
       applyPassVakhaai(s, action.seat);
@@ -166,15 +166,23 @@ function fail(message: string): never {
   throw new LaddisError(message);
 }
 
-function applyVakhaai(s: LaddisState, seat: Seat, bet: VakhaaiBet, suit: Suit): void {
+/**
+ * Vakhaai: the round is played with ONLY the first four cards — no second
+ * deal, no hukum (no trumps at all) — and the caller leads. With 4 tricks on
+ * the table, "4 hands alone" means the caller must win every one of them.
+ */
+function applyVakhaai(s: LaddisState, seat: Seat, bet: VakhaaiBet): void {
   if (s.phase !== 'vakhaai') fail('not in the vakhaai window');
   if (s.window.turn !== seat) fail('not your turn');
   if (!VAKHAAI_BETS.includes(bet)) fail('vakhaai must be 8, 16 or 32 kalyas');
   s.mode = 'vakhaai';
   s.vakhaai = { caller: seat, bet };
-  s.hukum = { suit, declarer: seat, revealed: false };
-  dealRest(s);
-  startPlay(s);
+  s.hukum = null;
+  s.undealt = [];
+  s.phase = 'playing';
+  s.window.turn = null;
+  s.turn = seat;
+  s.trickLeader = seat;
 }
 
 function applyPassVakhaai(s: LaddisState, seat: Seat): void {
@@ -190,18 +198,20 @@ function applyPassVakhaai(s: LaddisState, seat: Seat): void {
   }
 }
 
+/** Six-call order: the non-shuffling side first, then the shuffling side. */
+function sixOrder(s: LaddisState): Seat[] {
+  const n1 = nextSeat(s.dealer);
+  return [n1, partnerOf(n1), partnerOf(s.dealer), s.dealer];
+}
+
 function applyDeclareHukum(s: LaddisState, seat: Seat, suit: Suit): void {
   if (s.phase !== 'declaring') fail('not in the declaring phase');
   if (actingSeat(s) !== seat) fail('only the player right of the dealer declares the hukum');
   s.hukum = { suit, declarer: seat, revealed: false };
   dealRest(s);
-  // Six-call window: only the two non-shuffling seats, in turn order.
+  // Six-call window: everyone may raise to 6 hands — non-shufflers get first go.
   s.phase = 'sixCall';
-  s.window = { turn: seat, passed: [false, false, false, false] };
-  // Pre-pass the shuffling seats so the window only visits the other two.
-  for (let i = 0; i < 4; i++) {
-    if (teamOf(i as Seat) === s.shufflingTeam) s.window.passed[i] = true;
-  }
+  s.window = { turn: sixOrder(s)[0]!, passed: [false, false, false, false] };
 }
 
 function applyCallSix(s: LaddisState, seat: Seat): void {
@@ -216,8 +226,8 @@ function applyPassSix(s: LaddisState, seat: Seat): void {
   if (s.phase !== 'sixCall') fail('not in the six-call window');
   if (s.window.turn !== seat) fail('not your turn');
   s.window.passed[seat] = true;
-  const next = nextUnpassed(s, seat);
-  if (next === null) {
+  const next = sixOrder(s).find((t) => !s.window.passed[t]);
+  if (next === undefined) {
     startPlay(s);
   } else {
     s.window.turn = next;
@@ -227,7 +237,8 @@ function applyPassSix(s: LaddisState, seat: Seat): void {
 function applyCallHukum(s: LaddisState, seat: Seat): void {
   if (s.phase !== 'playing') fail('not in the playing phase');
   if (s.turn !== seat) fail('not your turn');
-  const hukum = s.hukum!;
+  const hukum = s.hukum;
+  if (hukum === null) fail('a vakhaai round has no hukum');
   if (hukum.revealed) fail('the hukum is already known');
   const led = ledSuit(s.trick);
   if (led === null) fail('cannot call for the hukum when leading');
@@ -253,7 +264,7 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
   if (s.mustPlayHukum === seat) s.mustPlayHukum = null;
 
   if (s.trick.length === 4) {
-    const trumpSuit = s.hukum!.revealed ? s.hukum!.suit : null;
+    const trumpSuit = s.hukum !== null && s.hukum.revealed ? s.hukum.suit : null;
     const winner = trickWinner(s.trick, RANK_ORDER_STANDARD, trumpSuit) as Seat;
     s.tricksTaken[winner] += 1;
     s.lastTrick = s.trick;
@@ -267,7 +278,7 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
 
   if (s.hands.every((h) => h.length === 0)) {
     s.roundResult = scoreRound(s);
-    s.hukum!.revealed = true; // showdown: everyone learns the hukum
+    if (s.hukum !== null) s.hukum.revealed = true; // showdown: everyone learns it
     s.phase = 'roundOver';
     s.turn = null;
   }

@@ -44,15 +44,15 @@ function bestSuit(hand: readonly Card[]): Suit {
 
 function chooseVakhaai(view: LaddisView): LaddisAction {
   const seat = view.seat as Seat;
-  // Solo 4-hands from a 4-card start is a big claim: require A+K in one suit
-  // plus another ace before betting the minimum.
-  for (const suit of SUITS) {
-    const inSuit = view.hand.filter((c) => c.suit === suit);
-    const hasAK = inSuit.some((c) => c.rank === 'A') && inSuit.some((c) => c.rank === 'K');
-    const otherAce = view.hand.some((c) => c.suit !== suit && c.rank === 'A');
-    if (inSuit.length >= 3 && hasAK && otherAce) {
-      return { type: 'vakhaai', seat, bet: 8, suit };
-    }
+  // A vakhaai round is 4 tricks, no trump, caller leads: call only when every
+  // card is a sure winner when led (an ace, or a king whose ace we also hold).
+  const sureWinners = view.hand.filter(
+    (c) =>
+      c.rank === 'A' ||
+      (c.rank === 'K' && view.hand.some((a) => a.suit === c.suit && a.rank === 'A')),
+  ).length;
+  if (sureWinners === 4) {
+    return { type: 'vakhaai', seat, bet: 8 };
   }
   return { type: 'passVakhaai', seat };
 }

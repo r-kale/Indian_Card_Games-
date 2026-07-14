@@ -1,20 +1,12 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import {
-  actingSeat,
-  applyAction,
-  bot304,
-  deriveEvents,
-  initDeal,
-  makeRng,
-  redactFor,
-  ROOM_CODE_ALPHABET,
-} from '@icg/shared';
+import { engines, makeRng, ROOM_CODE_ALPHABET } from '@icg/shared';
 import type {
-  Action304,
-  Game304State,
+  AnyGameEngine,
+  GameAction,
   GameEvent,
-  Player304View,
+  GameId,
+  GameView,
   Rng,
   RoomState,
   Seat,
@@ -52,7 +44,7 @@ export interface HostCallbacks {
   onFatal: (message: string) => void;
   /** Host's own copies of what guests receive over the wire. */
   onRoom: (room: RoomState) => void;
-  onView: (view: Player304View) => void;
+  onView: (view: GameView) => void;
   onEvent: (event: GameEvent) => void;
 }
 
@@ -73,7 +65,8 @@ export class P2PHost {
     null,
   ];
   private phase: 'lobby' | 'inGame' = 'lobby';
-  private game: Game304State | null = null;
+  private gameId: GameId = 'game304';
+  private game: unknown = null;
   private readonly botRng: Rng = makeRng(`p2p-${Date.now()}-${Math.random()}`);
   private timer: ReturnType<typeof setTimeout> | null = null;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
@@ -226,6 +219,17 @@ export class P2PHost {
     this.broadcast();
   }
 
+  setGame(gameId: GameId): void {
+    if (this.phase !== 'lobby') throw new Error('not in the lobby');
+    if (!(gameId in engines)) throw new Error('unknown game');
+    this.gameId = gameId;
+    this.broadcast();
+  }
+
+  private get engine(): AnyGameEngine {
+    return engines[this.gameId];
+  }
+
   removeBot(seat: Seat): void {
     if (this.seats[seat]?.kind !== 'bot') throw new Error('no bot on that seat');
     this.seats[seat] = null;
@@ -240,11 +244,9 @@ export class P2PHost {
       }
     }
     this.phase = 'inGame';
-    this.game = initDeal({
-      matchScore: [0, 0, 0, 0],
-      dealer: 0,
+    this.game = this.engine.init({
       seed: `p2p-${Date.now()}-${Math.random()}`,
-      dealNumber: 1,
+      hostSeat: this.seatOf(this.hostToken) ?? 0,
     });
     this.broadcast();
     this.broadcastGame();
@@ -258,19 +260,22 @@ export class P2PHost {
     this.broadcast();
   }
 
-  handleAction(token: string, action: Action304): void {
+  handleAction(token: string, action: GameAction): void {
     if (this.phase !== 'inGame' || this.game === null) throw new Error('no game in progress');
     const seat = this.seatOf(token);
     if (seat === null) throw new Error('you are spectating this game');
     if (action.seat !== seat) throw new Error('cannot act for another seat');
+    if (this.engine.hostOnly(action) && token !== this.hostToken) {
+      throw new Error('only the host can do that');
+    }
     this.applyAndBroadcast(action);
   }
 
-  private applyAndBroadcast(action: Action304): void {
+  private applyAndBroadcast(action: GameAction): void {
     const prev = this.game!;
-    const next = applyAction(prev, action);
+    const next: unknown = this.engine.apply(prev, action);
     this.game = next;
-    for (const event of deriveEvents(prev, next)) {
+    for (const event of this.engine.deriveEvents(prev, next) as GameEvent[]) {
       this.cb.onEvent(event);
       for (const p of this.players.values()) {
         if (p.conn?.open === true) send(p.conn, { t: 'event', event });
@@ -286,24 +291,25 @@ export class P2PHost {
     this.clearTimer();
     if (this.destroyed || this.phase !== 'inGame' || this.game === null) return;
     const game = this.game;
-    if (game.phase === 'matchOver') return; // host clicks back to lobby
-    if (game.phase === 'dealOver') {
+    const kind = this.engine.phaseKind(game);
+    if (kind === 'matchOver') return; // host clicks back to lobby
+    if (kind === 'roundOver') {
       this.timer = setTimeout(
-        () => this.applyAndBroadcast({ type: 'nextDeal', seat: 0 }),
+        () => this.applyAndBroadcast(this.engine.autoAdvance(game) as GameAction),
         DEAL_OVER_AUTO_MS,
       );
       return;
     }
-    const seat = actingSeat(game);
+    const seat = this.engine.actingSeat(game) as Seat | null;
     if (seat === null) return;
     const entry = this.seats[seat];
     if (entry === null) return;
     if (entry.kind === 'bot') {
-      const newTrick =
-        game.phase === 'playing' && game.trick.length === 0 && game.lastTrick !== null;
       this.timer = setTimeout(
         () => this.playBotMove(seat),
-        newTrick ? 2300 + Math.random() * 400 : 600 + Math.random() * 600,
+        this.engine.newTrickPause(game)
+          ? 2300 + Math.random() * 400
+          : 600 + Math.random() * 600,
       );
       return;
     }
@@ -315,10 +321,10 @@ export class P2PHost {
 
   private playBotMove(seat: Seat): void {
     if (this.destroyed || this.phase !== 'inGame' || this.game === null) return;
-    if (actingSeat(this.game) !== seat) return;
+    if (this.engine.actingSeat(this.game) !== seat) return;
     try {
-      const view = redactFor(this.game, seat);
-      this.applyAndBroadcast(bot304.chooseAction(view, this.botRng));
+      const view: unknown = this.engine.viewFor(this.game, seat);
+      this.applyAndBroadcast(this.engine.botAction(view, this.botRng) as GameAction);
     } catch (err) {
       console.error('[p2p host] bot move failed:', err);
     }
@@ -343,7 +349,7 @@ export class P2PHost {
     return {
       code: this.code,
       phase: this.phase,
-      gameId: 'game304',
+      gameId: this.gameId,
       seats,
       spectators: [...this.players.values()]
         .filter((p) => !seated.has(p.token) && p.connected)
@@ -367,7 +373,7 @@ export class P2PHost {
 
   private sendGameTo(player: P2PPlayer): void {
     if (this.game === null) return;
-    const view = redactFor(this.game, this.seatOf(player.token));
+    const view = this.engine.viewFor(this.game, this.seatOf(player.token)) as GameView;
     if (player.conn === null) this.cb.onView(view);
     else if (player.conn.open) send(player.conn, { t: 'view', view });
   }

@@ -32,9 +32,22 @@ export function Home() {
       </label>
 
       <div className="home-actions">
-        <button className="primary" disabled={!ready} onClick={() => startLocalGame(nickname)}>
-          Play vs 3 bots
-        </button>
+        <div className="button-row">
+          <button
+            className="primary grow"
+            disabled={!ready}
+            onClick={() => startLocalGame(nickname, 'game304')}
+          >
+            Play 304 vs bots
+          </button>
+          <button
+            className="primary grow"
+            disabled={!ready}
+            onClick={() => startLocalGame(nickname, 'laddis')}
+          >
+            Play Laddis vs bots
+          </button>
+        </div>
 
         <div className="online-box">
           <div className="online-title">Play online with friends</div>

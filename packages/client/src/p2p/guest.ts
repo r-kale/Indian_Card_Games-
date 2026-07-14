@@ -1,6 +1,6 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import type { Action304, GameEvent, Player304View, RoomState, Seat } from '@icg/shared';
+import type { GameAction, GameEvent, GameView, RoomState, Seat } from '@icg/shared';
 import { HEARTBEAT_TIMEOUT_MS, peerIdForCode, peerOptions } from './protocol';
 import type { GuestToHost, HostToGuest } from './protocol';
 
@@ -8,7 +8,7 @@ const CONNECT_TIMEOUT_MS = 10_000;
 
 export interface GuestCallbacks {
   onRoom: (room: RoomState) => void;
-  onView: (view: Player304View) => void;
+  onView: (view: GameView) => void;
   onEvent: (event: GameEvent) => void;
   onError: (message: string) => void;
   /** The host closed the room or the connection dropped for good. */
@@ -105,7 +105,7 @@ export class P2PGuest {
     this.send({ t: 'leaveSeat' });
   }
 
-  action(action: Action304): void {
+  action(action: GameAction): void {
     this.send({ t: 'action', action });
   }
 

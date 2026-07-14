@@ -332,6 +332,35 @@ input::placeholder {
   padding: 4px 14px;
   font-size: 0.85rem;
 }
+.game-picker {
+  display: flex;
+  gap: 8px;
+}
+.game-pick {
+  background: #00000044;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--paper);
+}
+.game-pick.selected {
+  outline: 3px solid #facc15;
+}
+.seat-badge.team-a {
+  border-left-color: var(--team-a);
+}
+.seat-badge.team-b {
+  border-left-color: var(--team-b);
+}
+.score-row.ladd-a .player-name {
+  color: #93c5fd;
+}
+.score-row.ladd-b .player-name {
+  color: #fcd34d;
+}
+.tag.hands {
+  background: #00000055;
+}
 
 /* ---------- Cards ---------- */
 

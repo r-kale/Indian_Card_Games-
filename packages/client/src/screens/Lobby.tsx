@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Seat } from '@icg/shared';
+import { GAME_NAMES } from '@icg/shared';
+import type { GameId, Seat } from '@icg/shared';
 import { useStore } from '../store';
 
 const SEAT_LAYOUT: { seat: Seat; area: string }[] = [
@@ -10,7 +11,8 @@ const SEAT_LAYOUT: { seat: Seat; area: string }[] = [
 ];
 
 export function Lobby() {
-  const { state, takeSeat, leaveSeat, addBot, removeBot, startGame, leaveRoom } = useStore();
+  const { state, takeSeat, leaveSeat, addBot, removeBot, setGame, startGame, leaveRoom } =
+    useStore();
   const [copied, setCopied] = useState(false);
   const [botNames, setBotNames] = useState<Record<number, string>>({});
   const room = state.roomState!;
@@ -38,9 +40,31 @@ export function Lobby() {
         </button>
       </div>
 
+      <div className="game-picker">
+        {(Object.keys(GAME_NAMES) as GameId[]).map((g) =>
+          isHost ? (
+            <button
+              key={g}
+              className={`game-pick ${room.gameId === g ? 'selected' : ''}`}
+              onClick={() => setGame(g)}
+            >
+              {GAME_NAMES[g]}
+            </button>
+          ) : (
+            room.gameId === g && (
+              <span key={g} className="game-pick selected">
+                {GAME_NAMES[g]}
+              </span>
+            )
+          ),
+        )}
+      </div>
+
       <p className="subtitle">
-        Partnerships change every deal: the bid winner declares a partner card, and whoever holds
-        it is secretly on their team. Empty seats get bots when the host starts.
+        {room.gameId === 'laddis'
+          ? 'Fixed teams sit opposite: seats 0 & 2 vs seats 1 & 3. The shuffling team recovers kalyas by winning 4 hands.'
+          : 'Partnerships change every deal: the bid winner declares a partner card, and whoever holds it is secretly on their team.'}{' '}
+        Empty seats get bots when the host starts.
       </p>
       {state.mode === 'p2pHost' && (
         <p className="subtitle p2p-note">

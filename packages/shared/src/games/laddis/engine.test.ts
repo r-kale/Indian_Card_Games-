@@ -1,0 +1,231 @@
+import { describe, expect, it } from 'vitest';
+import type { Card } from '../../core/cards';
+import { actingSeat, applyAction, initRound, legalActions } from './engine';
+import { formatKalyas, scoreRound } from './scoring';
+import { LaddisError } from './types';
+import type { LaddisState, Seat } from './types';
+import { redactFor } from './view';
+
+const c = (rank: Card['rank'], suit: Card['suit']): Card => ({ rank, suit });
+
+function fresh(seed = 'test'): LaddisState {
+  // Team 0 shuffles (dealer seat 0) with a 10-kalya deficit.
+  return initRound({ deficit: 10, shufflingTeam: 0, dealer: 0, seed, roundNumber: 1 });
+}
+
+/** All four players pass the vakhaai window. */
+function passVakhaai(s: LaddisState): LaddisState {
+  for (let i = 0; i < 4; i++) {
+    s = applyAction(s, { type: 'passVakhaai', seat: actingSeat(s)! });
+  }
+  return s;
+}
+
+describe('round flow', () => {
+  it('deals 4 cards and opens the vakhaai window right of the dealer', () => {
+    const s = fresh();
+    expect(s.phase).toBe('vakhaai');
+    expect(s.hands.map((h) => h.length)).toEqual([4, 4, 4, 4]);
+    expect(s.undealt).toHaveLength(16);
+    expect(s.window.turn).toBe(1);
+  });
+
+  it('walks the vakhaai window in turn order, then the non-shuffling neighbour declares', () => {
+    let s = fresh();
+    expect(actingSeat(s)).toBe(1);
+    s = applyAction(s, { type: 'passVakhaai', seat: 1 });
+    expect(actingSeat(s)).toBe(2);
+    s = applyAction(s, { type: 'passVakhaai', seat: 2 });
+    s = applyAction(s, { type: 'passVakhaai', seat: 3 });
+    s = applyAction(s, { type: 'passVakhaai', seat: 0 });
+    expect(s.phase).toBe('declaring');
+    expect(actingSeat(s)).toBe(1); // non-shuffling (team 1) seat right of dealer 0
+  });
+
+  it('hukum declaration deals the rest and opens the six-call window for non-shufflers only', () => {
+    let s = fresh();
+    s = passVakhaai(s);
+    s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
+    expect(s.hands.map((h) => h.length)).toEqual([8, 8, 8, 8]);
+    expect(s.phase).toBe('sixCall');
+    expect(s.window.turn).toBe(1);
+    s = applyAction(s, { type: 'passSix', seat: 1 });
+    expect(s.window.turn).toBe(3); // skips the shuffling seats 2 and 0? no — skips 2 (shuffling team 0)
+    s = applyAction(s, { type: 'passSix', seat: 3 });
+    expect(s.phase).toBe('playing');
+    expect(s.turn).toBe(1); // right of dealer leads
+  });
+
+  it('a vakhaai call locks the round: rest dealt, straight to play, no six window', () => {
+    let s = fresh();
+    s = applyAction(s, { type: 'passVakhaai', seat: 1 });
+    s = applyAction(s, { type: 'vakhaai', seat: 2, bet: 16, suit: 'C' });
+    expect(s.mode).toBe('vakhaai');
+    expect(s.vakhaai).toEqual({ caller: 2, bet: 16 });
+    expect(s.hukum).toMatchObject({ suit: 'C', declarer: 2, revealed: false });
+    expect(s.phase).toBe('playing');
+    expect(s.hands.map((h) => h.length)).toEqual([8, 8, 8, 8]);
+  });
+
+  it('rejects illegal vakhaai bets', () => {
+    const s = fresh();
+    expect(() =>
+      applyAction(s, { type: 'vakhaai', seat: 1, bet: 10 as never, suit: 'H' }),
+    ).toThrow(LaddisError);
+  });
+});
+
+/** Craft a 2-tricks-left playing state. Hukum = hearts (hidden), declared by seat 1. */
+function endgame(): LaddisState {
+  const base = fresh('endgame');
+  return {
+    ...base,
+    phase: 'playing',
+    undealt: [],
+    hands: [
+      [c('A', 'S'), c('8', 'D')],
+      [c('K', 'S'), c('7', 'S')],
+      [c('Q', 'S'), c('8', 'H')],
+      [c('J', 'S'), c('7', 'H')],
+    ],
+    window: { turn: null, passed: [true, true, true, true] },
+    hukum: { suit: 'H', declarer: 1, revealed: false },
+    turn: 1,
+    trickLeader: 1,
+    trick: [],
+    tricksTaken: [2, 2, 1, 1],
+  };
+}
+
+describe('playing', () => {
+  it('uses standard ranking: ace beats king', () => {
+    let s = endgame();
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('K', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('J', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
+    expect(s.lastTrickWinner).toBe(0);
+  });
+
+  it('hidden hukum has no power; calling for it activates trump and forces the caller to play it', () => {
+    let s = endgame();
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('K', 'S') });
+    // Seat 2 holds a spade: calling for the hukum is not on offer.
+    expect(legalActions(s, 2 as Seat).some((a) => a.type === 'callHukum')).toBe(false);
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('J', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
+    expect(s.lastTrickWinner).toBe(0); // hearts stayed powerless
+
+    // Final trick: seat 0 leads a diamond; seat 1 is void and may call the hukum.
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'D') });
+    const options = legalActions(s, 1 as Seat);
+    expect(options.some((a) => a.type === 'callHukum')).toBe(true);
+    s = applyAction(s, { type: 'callHukum', seat: 1 });
+    expect(s.hukum!.revealed).toBe(true);
+    // Seat 1 holds no heart, so any card is playable; seat 2 must now beware.
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
+    // Seat 2 called nothing but holds 8H: void in diamonds, free choice — play the trump.
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('8', 'H') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('7', 'H') });
+    expect(s.phase).toBe('roundOver');
+    expect(s.lastTrickWinner).toBe(2); // 8♥ trumps the led diamond
+  });
+
+  it('a caller holding hukum cards must play one', () => {
+    let s = endgame();
+    // Give seat 3 a heart and make them void in the led suit.
+    s.hands = [
+      [c('A', 'S'), c('8', 'D')],
+      [c('K', 'S'), c('7', 'D')],
+      [c('Q', 'S'), c('8', 'H')],
+      [c('7', 'H'), c('J', 'S')],
+    ];
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('8', 'H') }); // void, throws a heart unknowingly
+    // Seat 3 is void in diamonds and calls for the hukum.
+    s = applyAction(s, { type: 'callHukum', seat: 3 });
+    const plays = legalActions(s, 3 as Seat).filter((a) => a.type === 'playCard');
+    expect(plays).toEqual([{ type: 'playCard', seat: 3, card: c('7', 'H') }]);
+  });
+});
+
+describe('scoring the ledger', () => {
+  const base = (): LaddisState => {
+    const s = endgame();
+    s.tricksTaken = [0, 0, 0, 0];
+    return s;
+  };
+
+  it('normal round: shuffling team recovers 5 with 4 hands, pays 10 without', () => {
+    let s = base();
+    s.tricksTaken = [2, 3, 2, 1]; // team 0 (shuffling) has 4
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: -5, deficitAfter: 5, swapped: false });
+    s = base();
+    s.tricksTaken = [1, 3, 2, 2]; // team 0 has 3
+    expect(scoreRound(s)).toMatchObject({ made: false, delta: 10, deficitAfter: 20 });
+  });
+
+  it('erasing the deficit swaps the shuffling role with overshoot carried', () => {
+    const s = base();
+    s.deficit = 3;
+    s.tricksTaken = [2, 2, 2, 2]; // shuffling team 0 reaches 4
+    const r = scoreRound(s);
+    expect(r).toMatchObject({ delta: -5, deficitAfter: 2, shufflingTeamAfter: 1, swapped: true });
+  });
+
+  it('six-hand call: +6 made, -12 failed', () => {
+    let s = base();
+    s.mode = 'six';
+    s.six = { caller: 1 };
+    s.tricksTaken = [1, 3, 1, 3]; // callers (team 1) have 6
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: 6, deficitAfter: 16 });
+    s = base();
+    s.mode = 'six';
+    s.six = { caller: 1 };
+    s.tricksTaken = [2, 3, 1, 2]; // callers have 5
+    const r = scoreRound(s);
+    expect(r).toMatchObject({ made: false, delta: -12, deficitAfter: 2, swapped: true });
+  });
+
+  it('vakhaai counts only the caller own hands and doubles on a loss', () => {
+    let s = base();
+    s.mode = 'vakhaai';
+    s.vakhaai = { caller: 2, bet: 16 }; // caller on the shuffling team
+    s.tricksTaken = [0, 2, 4, 2];
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: -16, deficitAfter: 6, swapped: true });
+    s = base();
+    s.mode = 'vakhaai';
+    s.vakhaai = { caller: 2, bet: 16 };
+    s.tricksTaken = [2, 2, 3, 1]; // partner tricks don't rescue the caller
+    expect(scoreRound(s)).toMatchObject({ made: false, delta: 32, deficitAfter: 42 });
+    s = base();
+    s.mode = 'vakhaai';
+    s.vakhaai = { caller: 1, bet: 8 }; // caller on the non-shuffling team
+    s.tricksTaken = [2, 4, 1, 1];
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: 8, deficitAfter: 18 });
+    s = base();
+    s.mode = 'vakhaai';
+    s.vakhaai = { caller: 1, bet: 8 };
+    s.tricksTaken = [3, 3, 1, 1];
+    expect(scoreRound(s)).toMatchObject({ made: false, delta: -16, swapped: true, deficitAfter: 6 });
+  });
+
+  it('formats kalyas into laddoos', () => {
+    expect(formatKalyas(0)).toBe('0 kalyas');
+    expect(formatKalyas(16)).toBe('ardha');
+    expect(formatKalyas(37)).toBe('1 laddoo + 5 kalyas');
+    expect(formatKalyas(48)).toBe('1 laddoo + ardha');
+  });
+});
+
+describe('views', () => {
+  it('hides the hukum suit from everyone but the declarer until revealed', () => {
+    let s = fresh();
+    s = passVakhaai(s);
+    s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
+    expect(redactFor(s, 1).hukum).toEqual({ declarer: 1, revealed: false, suit: 'H' });
+    expect(redactFor(s, 0).hukum).toEqual({ declarer: 1, revealed: false, suit: null });
+    expect(redactFor(s, 2).hukum!.suit).toBeNull();
+  });
+});

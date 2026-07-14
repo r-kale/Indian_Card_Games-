@@ -1,6 +1,7 @@
 import { useStore } from './store';
 import { Home } from './screens/Home';
 import { Lobby } from './screens/Lobby';
+import { LaddisTable } from './screens/LaddisTable';
 import { Table } from './screens/Table';
 
 export function App() {
@@ -14,7 +15,16 @@ export function App() {
   } else if (state.roomState === null) {
     screen = <div className="center-note">Joining room…</div>;
   } else if (state.roomState.phase === 'inGame') {
-    screen = state.view !== null ? <Table /> : <div className="center-note">Loading game…</div>;
+    screen =
+      state.view !== null ? (
+        state.roomState.gameId === 'laddis' ? (
+          <LaddisTable />
+        ) : (
+          <Table />
+        )
+      ) : (
+        <div className="center-note">Loading game…</div>
+      );
   } else {
     screen = <Lobby />;
   }

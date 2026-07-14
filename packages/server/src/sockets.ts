@@ -66,6 +66,12 @@ export function wireSockets(io: IoServer, rooms: RoomManager): void {
     socket.on('lobby:removeBot', (p, ack) =>
       inRoom(socket, rooms, ack, (room, token) => room.removeBot(token, requireSeat(p?.seat))),
     );
+    socket.on('lobby:setGame', (p, ack) =>
+      inRoom(socket, rooms, ack, (room, token) => {
+        if (p?.gameId !== 'game304' && p?.gameId !== 'laddis') throw new RoomError('unknown game');
+        room.setGame(token, p.gameId);
+      }),
+    );
     socket.on('lobby:start', (ack) => inRoom(socket, rooms, ack, (room, token) => room.start(token)));
     socket.on('room:toLobby', (ack) => inRoom(socket, rooms, ack, (room, token) => room.toLobby(token)));
 

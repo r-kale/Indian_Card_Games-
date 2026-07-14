@@ -1,34 +1,28 @@
-import {
-  actingSeat,
-  applyAction,
-  bot304,
-  initDeal,
-  makeRng,
-  redactFor,
-} from '@icg/shared';
-import type { Action304, Game304State, Player304View, RoomState, Seat } from '@icg/shared';
+import { engines, makeRng } from '@icg/shared';
+import type { AnyGameEngine, GameAction, GameId, GameView, RoomState } from '@icg/shared';
 
 const BOT_NAMES = ['Bot Chandu', 'Bot Meena', 'Bot Raju'];
 
 /**
- * A complete 304 game running entirely in the browser: you at seat 0 against
+ * A complete game running entirely in the browser: you at seat 0 against
  * three bots. Powers the offline mode of static (GitHub Pages) deployments —
- * same engine, same redacted views, no server involved.
+ * same engines, same redacted views, no server involved.
  */
 export class LocalGame {
-  private state: Game304State;
+  private state: unknown;
+  private readonly engine: AnyGameEngine;
   private readonly rng = makeRng(`local-${Date.now()}-${Math.random()}`);
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly nickname: string,
-    private readonly onView: (view: Player304View) => void,
+    private readonly gameId: GameId,
+    private readonly onView: (view: GameView) => void,
   ) {
-    this.state = initDeal({
-      matchScore: [0, 0, 0, 0],
-      dealer: 0,
+    this.engine = engines[gameId];
+    this.state = this.engine.init({
       seed: `local-${Date.now()}-${Math.random()}`,
-      dealNumber: 1,
+      hostSeat: 0,
     });
   }
 
@@ -41,7 +35,7 @@ export class LocalGame {
     return {
       code: 'SOLO',
       phase: 'inGame',
-      gameId: 'game304',
+      gameId: this.gameId,
       seats: [
         { kind: 'human', playerId: 'local-you', nickname: this.nickname, connected: true },
         { kind: 'bot', playerId: null, nickname: BOT_NAMES[0]!, connected: true },
@@ -53,8 +47,8 @@ export class LocalGame {
     };
   }
 
-  dispatch(action: Action304): void {
-    this.state = applyAction(this.state, action);
+  dispatch(action: GameAction): void {
+    this.state = this.engine.apply(this.state, action);
     this.emit();
     this.schedule();
   }
@@ -66,26 +60,22 @@ export class LocalGame {
 
   private schedule(): void {
     this.destroy();
-    if (this.state.phase === 'matchOver' || this.state.phase === 'dealOver') return;
-    const seat = actingSeat(this.state);
+    if (this.engine.phaseKind(this.state) !== 'acting') return; // human advances rounds
+    const seat = this.engine.actingSeat(this.state);
     if (seat === null || seat === 0) return; // the human is on the clock
-    const newTrick =
-      this.state.phase === 'playing' &&
-      this.state.trick.length === 0 &&
-      this.state.lastTrick !== null;
     this.timer = setTimeout(
       () => this.playBot(seat),
-      newTrick ? 2300 + Math.random() * 400 : 500 + Math.random() * 500,
+      this.engine.newTrickPause(this.state) ? 2300 + Math.random() * 400 : 500 + Math.random() * 500,
     );
   }
 
-  private playBot(seat: Seat): void {
-    if (actingSeat(this.state) !== seat) return;
-    const view = redactFor(this.state, seat);
-    this.dispatch(bot304.chooseAction(view, this.rng));
+  private playBot(seat: number): void {
+    if (this.engine.actingSeat(this.state) !== seat) return;
+    const view: unknown = this.engine.viewFor(this.state, seat);
+    this.dispatch(this.engine.botAction(view, this.rng) as GameAction);
   }
 
   private emit(): void {
-    this.onView(redactFor(this.state, 0));
+    this.onView(this.engine.viewFor(this.state, 0) as GameView);
   }
 }

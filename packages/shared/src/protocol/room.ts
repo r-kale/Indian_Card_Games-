@@ -1,5 +1,12 @@
 export type RoomPhase = 'lobby' | 'inGame';
 
+export type GameId = 'game304' | 'laddis';
+
+export const GAME_NAMES: Record<GameId, string> = {
+  game304: '304 (hidden partner)',
+  laddis: 'Laddis',
+};
+
 export interface SeatInfo {
   kind: 'human' | 'bot';
   /** Public player id (not the secret session token). Bots have no id. */
@@ -17,7 +24,7 @@ export interface SpectatorInfo {
 export interface RoomState {
   code: string;
   phase: RoomPhase;
-  gameId: 'game304';
+  gameId: GameId;
   seats: [SeatInfo | null, SeatInfo | null, SeatInfo | null, SeatInfo | null];
   spectators: SpectatorInfo[];
   hostId: string;

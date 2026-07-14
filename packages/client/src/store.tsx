@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { Action304, GameEvent, Player304View, RoomState, Seat } from '@icg/shared';
+import type { GameAction, GameEvent, GameId, GameView, RoomState, Seat } from '@icg/shared';
 import { LocalGame } from './localGame';
 import { P2PGuest } from './p2p/guest';
 import { P2PHost } from './p2p/host';
@@ -28,7 +28,7 @@ export interface AppState {
   /** True while we try to resume a stored session on page load. */
   resuming: boolean;
   roomState: RoomState | null;
-  view: Player304View | null;
+  view: GameView | null;
   toasts: Toast[];
   error: string | null;
 }
@@ -38,7 +38,7 @@ type AppAction =
   | { type: 'session'; session: Session | null }
   | { type: 'resuming'; resuming: boolean }
   | { type: 'roomState'; roomState: RoomState }
-  | { type: 'view'; view: Player304View }
+  | { type: 'view'; view: GameView }
   | { type: 'toast'; toast: Toast }
   | { type: 'expireToast'; id: number }
   | { type: 'error'; error: string | null }
@@ -129,14 +129,15 @@ export interface StoreApi {
   createRoom: (nickname: string) => void;
   joinRoom: (roomCode: string, nickname: string) => void;
   hostP2PRoom: (nickname: string) => void;
-  startLocalGame: (nickname: string) => void;
+  startLocalGame: (nickname: string, gameId: GameId) => void;
+  setGame: (gameId: GameId) => void;
   leaveRoom: () => void;
   takeSeat: (seat: Seat) => void;
   leaveSeat: () => void;
   addBot: (seat: Seat, name?: string) => void;
   removeBot: (seat: Seat) => void;
   startGame: () => void;
-  sendAction: (action: Action304) => void;
+  sendAction: (action: GameAction) => void;
   toLobby: () => void;
   clearError: () => void;
 }
@@ -187,7 +188,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
     const onDisconnect = () => dispatch({ type: 'connected', connected: false });
     const onRoomState = (roomState: RoomState) => setRoomState(roomState);
-    const onView = (view: Player304View) => dispatch({ type: 'view', view });
+    const onView = (view: GameView) => dispatch({ type: 'view', view });
     const onEvent = (event: GameEvent) => notifyEvent(event);
     const onRoomError = (e: { message: string }) => dispatch({ type: 'error', error: e.message });
 
@@ -307,9 +308,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       p2pHost.current = host;
     },
-    startLocalGame: (nickname) => {
+    startLocalGame: (nickname, gameId) => {
       saveNickname(nickname);
-      const game = new LocalGame(nickname.trim() || 'You', (view) =>
+      const game = new LocalGame(nickname.trim() || 'You', gameId, (view) =>
         dispatch({ type: 'view', view }),
       );
       localGame.current?.destroy();
@@ -356,6 +357,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeBot: (seat) => {
       if (p2pHost.current !== null) return hostOp((h) => h.removeBot(seat));
       socket.emit('lobby:removeBot', { seat }, ackOrError(fail));
+    },
+    setGame: (gameId) => {
+      if (p2pHost.current !== null) return hostOp((h) => h.setGame(gameId));
+      socket.emit('lobby:setGame', { gameId }, ackOrError(fail));
     },
     startGame: () => {
       if (p2pHost.current !== null) return hostOp((h) => h.start());
@@ -410,6 +415,21 @@ function describeEvent(event: GameEvent, nameOf: (seat: number) => string): stri
       return r.madeIt
         ? `Bid of ${r.bid} made — ${nameOf(r.bidder)} & ${nameOf(r.partnerSeat)} score +1`
         : `Bid of ${r.bid} failed — the defenders score +1`;
+    }
+    case 'vakhaaiCalled':
+      return `\u{1F0CF} Vakhaai! ${nameOf(event.seat)} bets ${event.bet} kalyas on 4 hands alone`;
+    case 'sixCalled':
+      return `\u26A1 ${nameOf(event.seat)}'s team commits to 6 hands!`;
+    case 'hukumRevealed': {
+      const names = { S: 'Spades \u2660', H: 'Hearts \u2665', D: 'Diamonds \u2666', C: 'Clubs \u2663' } as const;
+      return `Hukum revealed: ${names[event.suit]}`;
+    }
+    case 'roundScored': {
+      const r = event.result;
+      const dir = r.delta < 0 ? `recover ${-r.delta}` : `pay ${r.delta}`;
+      return r.made
+        ? `Round made \u2014 the shuffling side ${dir} kalyas`
+        : `Round failed \u2014 the shuffling side ${dir} kalyas`;
     }
     case 'matchOver':
       return null; // the overlay handles this

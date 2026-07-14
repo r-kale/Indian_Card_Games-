@@ -1,4 +1,4 @@
-import type { Action304, GameEvent, Player304View, RoomState, Seat } from '@icg/shared';
+import type { GameAction, GameEvent, GameView, RoomState, Seat } from '@icg/shared';
 
 /**
  * Message protocol between a guest browser and the host browser over a
@@ -9,12 +9,12 @@ export type GuestToHost =
   | { t: 'hello'; nickname: string; token?: string }
   | { t: 'takeSeat'; seat: Seat }
   | { t: 'leaveSeat' }
-  | { t: 'action'; action: Action304 };
+  | { t: 'action'; action: GameAction };
 
 export type HostToGuest =
   | { t: 'welcome'; playerId: string; token: string }
   | { t: 'room'; room: RoomState }
-  | { t: 'view'; view: Player304View }
+  | { t: 'view'; view: GameView }
   | { t: 'event'; event: GameEvent }
   | { t: 'error'; message: string }
   | { t: 'rejected'; reason: string }

@@ -19,6 +19,19 @@ Open http://localhost:5173, enter a name, create a room, take a seat, and hit
 (or the copied invite link) from the lobby. **Play vs 3 bots** starts an instant
 offline game that runs entirely in your browser — no server needed.
 
+## Three ways to play multiplayer
+
+| Mode | Needs | How it works |
+| --- | --- | --- |
+| **P2P room** (works on GitHub Pages) | Nothing — just browsers | The host's browser runs the game; friends connect directly to it over WebRTC (PeerJS). The free PeerJS broker only introduces peers — game data never touches a server. Keep the host tab open. |
+| **Server room** | The Node game server | A neutral server holds all state and validates every move — hands are hidden even from the host machine, and reconnection/bot-takeover are the most robust. |
+| **Offline** | Nothing | You vs 3 bots, fully in-browser. |
+
+Both online modes send each player only their own **redacted view**, so guests can
+never see other hands. In P2P the host *machine* holds the full state (like being
+the dealer at a real table) — fine among friends; use a server room when that
+matters. A self-hosted PeerJS broker can be used via `?srv=host:port` in the URL.
+
 ## GitHub Pages deployment
 
 Pushing to `main` runs `.github/workflows/pages.yml`, which tests, builds the
@@ -26,13 +39,13 @@ client, and deploys it to GitHub Pages (one-time setup: repo **Settings →
 Pages → Source: GitHub Actions**). The site lands at
 `https://<user>.github.io/<repo>/`.
 
-Pages is static hosting, so the deployed site plays **offline vs bots** out of
-the box (the same rules engine runs in the browser). To enable online rooms
-from the Pages site too, host `packages/server` anywhere that runs Node
-(Render, Fly.io, Railway, a VPS — `npm install && npm run start -w @icg/server`)
-and set a repository variable `GAME_SERVER_URL` (Settings → Secrets and
-variables → Actions → Variables) to that server's URL; the next deploy bakes
-it in via `VITE_SERVER_URL`.
+Pages is static hosting, so the deployed site offers **offline vs bots** and
+**P2P rooms** (host a room, share the code — no server anywhere). To also
+enable server rooms from the Pages site, host `packages/server` anywhere that
+runs Node (Render, Fly.io, Railway, a VPS — `npm install && npm run start -w
+@icg/server`) and set a repository variable `GAME_SERVER_URL` (Settings →
+Secrets and variables → Actions → Variables) to that server's URL; the next
+deploy bakes it in via `VITE_SERVER_URL`.
 
 ```bash
 npm test           # rules-engine unit tests + 40-match bot simulation

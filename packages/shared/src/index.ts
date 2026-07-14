@@ -6,6 +6,7 @@ export * from './protocol/events';
 export * from './games/game304/types';
 export * from './games/game304/engine';
 export * from './games/game304/scoring';
+export * from './games/game304/events';
 export * from './games/game304/view';
 export * as bot304 from './games/game304/bot';
 export * from './gameAdapter';

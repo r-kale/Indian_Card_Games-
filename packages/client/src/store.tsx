@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useReducer, useRef } from 'react'
 import type { ReactNode } from 'react';
 import type { Action304, GameEvent, Player304View, RoomState, Seat } from '@icg/shared';
 import { LocalGame } from './localGame';
+import { P2PGuest } from './p2p/guest';
+import { P2PHost } from './p2p/host';
 import { socket } from './socket';
 
 export interface Session {
@@ -17,8 +19,11 @@ export interface Toast {
 
 export interface AppState {
   connected: boolean;
-  /** 'local' = offline vs bots, entirely in the browser (GitHub Pages mode). */
-  mode: 'online' | 'local';
+  /**
+   * 'local' = offline vs bots. 'p2pHost'/'p2pGuest' = serverless online play
+   * over WebRTC — the host's browser runs the room. 'online' = Socket.IO server.
+   */
+  mode: 'online' | 'local' | 'p2pHost' | 'p2pGuest';
   session: Session | null;
   /** True while we try to resume a stored session on page load. */
   resuming: boolean;
@@ -38,6 +43,7 @@ type AppAction =
   | { type: 'expireToast'; id: number }
   | { type: 'error'; error: string | null }
   | { type: 'localStarted'; session: Session; roomState: RoomState }
+  | { type: 'p2pStarted'; mode: 'p2pHost' | 'p2pGuest'; session: Session }
   | { type: 'leftRoom' };
 
 const initial: AppState = {
@@ -82,6 +88,8 @@ function reducer(state: AppState, action: AppAction): AppState {
         view: null,
         error: null,
       };
+    case 'p2pStarted':
+      return { ...state, mode: action.mode, session: action.session, error: null };
     case 'leftRoom':
       return { ...state, mode: 'online', session: null, roomState: null, view: null };
   }
@@ -120,6 +128,7 @@ export interface StoreApi {
   state: AppState;
   createRoom: (nickname: string) => void;
   joinRoom: (roomCode: string, nickname: string) => void;
+  hostP2PRoom: (nickname: string) => void;
   startLocalGame: (nickname: string) => void;
   leaveRoom: () => void;
   takeSeat: (seat: Seat) => void;
@@ -137,6 +146,16 @@ const StoreContext = createContext<StoreApi | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial);
   const localGame = useRef<LocalGame | null>(null);
+  const p2pHost = useRef<P2PHost | null>(null);
+  const p2pGuest = useRef<P2PGuest | null>(null);
+
+  const notifyEvent = (event: GameEvent) => {
+    const text = describeEvent(event);
+    if (text === null) return;
+    const toast: Toast = { id: ++toastId, text };
+    dispatch({ type: 'toast', toast });
+    setTimeout(() => dispatch({ type: 'expireToast', id: toast.id }), 4000);
+  };
 
   useEffect(() => {
     const onConnect = () => {
@@ -160,13 +179,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const onDisconnect = () => dispatch({ type: 'connected', connected: false });
     const onRoomState = (roomState: RoomState) => dispatch({ type: 'roomState', roomState });
     const onView = (view: Player304View) => dispatch({ type: 'view', view });
-    const onEvent = (event: GameEvent) => {
-      const text = describeEvent(event);
-      if (text === null) return;
-      const toast: Toast = { id: ++toastId, text };
-      dispatch({ type: 'toast', toast });
-      setTimeout(() => dispatch({ type: 'expireToast', id: toast.id }), 4000);
-    };
+    const onEvent = (event: GameEvent) => notifyEvent(event);
     const onRoomError = (e: { message: string }) => dispatch({ type: 'error', error: e.message });
 
     socket.on('connect', onConnect);
@@ -187,6 +200,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const fail = (error: string) => dispatch({ type: 'error', error });
 
+  const destroyP2P = () => {
+    p2pHost.current?.destroy();
+    p2pHost.current = null;
+    p2pGuest.current?.destroy();
+    p2pGuest.current = null;
+  };
+
+  const joinP2P = (code: string, nickname: string) => {
+    const guest = new P2PGuest({
+      onRoom: (roomState) => dispatch({ type: 'roomState', roomState }),
+      onView: (view) => dispatch({ type: 'view', view }),
+      onEvent: notifyEvent,
+      onError: fail,
+      onClosed: (reason) => {
+        fail(reason);
+        p2pGuest.current?.destroy();
+        p2pGuest.current = null;
+        dispatch({ type: 'leftRoom' });
+      },
+    });
+    p2pGuest.current?.destroy();
+    p2pGuest.current = guest;
+    guest
+      .connect(code, nickname)
+      .then(({ playerId, token }) => {
+        dispatch({
+          type: 'p2pStarted',
+          mode: 'p2pGuest',
+          session: { roomCode: code, token, playerId },
+        });
+      })
+      .catch((err: Error) => {
+        guest.destroy();
+        if (p2pGuest.current === guest) p2pGuest.current = null;
+        fail(err.message);
+      });
+  };
+
+  /** Run a host-room call, surfacing rule violations as banner errors. */
+  const hostOp = (fn: (host: P2PHost) => void) => {
+    try {
+      fn(p2pHost.current!);
+    } catch (err) {
+      fail(err instanceof Error ? err.message : 'something went wrong');
+    }
+  };
+
   const api: StoreApi = {
     state,
     createRoom: (nickname) => {
@@ -201,12 +261,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     joinRoom: (roomCode, nickname) => {
       saveNickname(nickname);
       const code = roomCode.trim().toUpperCase();
-      socket.emit('room:join', { roomCode: code, nickname }, (res) => {
-        if (!res.ok) return fail(res.error);
-        const session = { roomCode: code, token: res.token, playerId: res.playerId };
-        saveSession(session);
-        dispatch({ type: 'session', session });
+      // Try the game server first when it's reachable; otherwise (or if it
+      // doesn't know the code) the code may belong to a P2P host browser.
+      if (socket.connected) {
+        socket.emit('room:join', { roomCode: code, nickname }, (res) => {
+          if (!res.ok) {
+            joinP2P(code, nickname);
+            return;
+          }
+          const session = { roomCode: code, token: res.token, playerId: res.playerId };
+          saveSession(session);
+          dispatch({ type: 'session', session });
+        });
+      } else {
+        joinP2P(code, nickname);
+      }
+    },
+    hostP2PRoom: (nickname) => {
+      saveNickname(nickname);
+      destroyP2P();
+      const host = new P2PHost(nickname, {
+        onReady: (code) => {
+          dispatch({
+            type: 'p2pStarted',
+            mode: 'p2pHost',
+            session: { roomCode: code, token: host.hostToken, playerId: 'p2p-host' },
+          });
+        },
+        onFatal: (message) => {
+          if (p2pHost.current === host) p2pHost.current = null;
+          fail(message);
+        },
+        onRoom: (roomState) => dispatch({ type: 'roomState', roomState }),
+        onView: (view) => dispatch({ type: 'view', view }),
+        onEvent: notifyEvent,
       });
+      p2pHost.current = host;
     },
     startLocalGame: (nickname) => {
       saveNickname(nickname);
@@ -229,16 +319,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'leftRoom' });
         return;
       }
+      if (p2pHost.current !== null || p2pGuest.current !== null) {
+        destroyP2P();
+        dispatch({ type: 'leftRoom' });
+        return;
+      }
       saveSession(null);
       dispatch({ type: 'leftRoom' });
       socket.disconnect();
       socket.connect();
     },
-    takeSeat: (seat) => socket.emit('lobby:takeSeat', { seat }, ackOrError(fail)),
-    leaveSeat: () => socket.emit('lobby:leaveSeat', ackOrError(fail)),
-    addBot: (seat) => socket.emit('lobby:addBot', { seat }, ackOrError(fail)),
-    removeBot: (seat) => socket.emit('lobby:removeBot', { seat }, ackOrError(fail)),
-    startGame: () => socket.emit('lobby:start', ackOrError(fail)),
+    takeSeat: (seat) => {
+      if (p2pHost.current !== null) return hostOp((h) => h.takeSeat(h.hostToken, seat));
+      if (p2pGuest.current !== null) return p2pGuest.current.takeSeat(seat);
+      socket.emit('lobby:takeSeat', { seat }, ackOrError(fail));
+    },
+    leaveSeat: () => {
+      if (p2pHost.current !== null) return hostOp((h) => h.leaveSeat(h.hostToken));
+      if (p2pGuest.current !== null) return p2pGuest.current.leaveSeat();
+      socket.emit('lobby:leaveSeat', ackOrError(fail));
+    },
+    addBot: (seat) => {
+      if (p2pHost.current !== null) return hostOp((h) => h.addBot(seat));
+      socket.emit('lobby:addBot', { seat }, ackOrError(fail));
+    },
+    removeBot: (seat) => {
+      if (p2pHost.current !== null) return hostOp((h) => h.removeBot(seat));
+      socket.emit('lobby:removeBot', { seat }, ackOrError(fail));
+    },
+    startGame: () => {
+      if (p2pHost.current !== null) return hostOp((h) => h.start());
+      socket.emit('lobby:start', ackOrError(fail));
+    },
     sendAction: (action) => {
       if (localGame.current !== null) {
         try {
@@ -248,6 +360,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
+      if (p2pHost.current !== null) {
+        return hostOp((h) => h.handleAction(h.hostToken, action));
+      }
+      if (p2pGuest.current !== null) return p2pGuest.current.action(action);
       socket.emit('game:action', { action }, ackOrError(fail));
     },
     toLobby: () => {
@@ -256,6 +372,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         api.leaveRoom();
         return;
       }
+      if (p2pHost.current !== null) return hostOp((h) => h.toLobby());
       socket.emit('room:toLobby', ackOrError(fail));
     },
     clearError: () => dispatch({ type: 'error', error: null }),

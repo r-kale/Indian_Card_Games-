@@ -41,6 +41,14 @@ export function Lobby() {
         Teams sit across from each other: <span className="team-a">seats 0 &amp; 2</span> vs{' '}
         <span className="team-b">seats 1 &amp; 3</span>. Empty seats get bots when the host starts.
       </p>
+      {state.mode === 'p2pHost' && (
+        <p className="subtitle p2p-note">
+          ⚡ P2P room — your browser is running the game. Keep this tab open.
+        </p>
+      )}
+      {state.mode === 'p2pGuest' && (
+        <p className="subtitle p2p-note">⚡ P2P room — connected directly to the host's browser.</p>
+      )}
 
       <div className="seat-diamond">
         <div className="diamond-center">304</div>

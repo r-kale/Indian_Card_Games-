@@ -90,7 +90,7 @@ export interface LaddisState {
 }
 
 export type LaddisAction =
-  | { type: 'vakhaai'; seat: Seat; bet: VakhaaiBet; suit: Suit }
+  | { type: 'vakhaai'; seat: Seat; bet: VakhaaiBet }
   | { type: 'passVakhaai'; seat: Seat }
   | { type: 'declareHukum'; seat: Seat; suit: Suit }
   | { type: 'callSix'; seat: Seat }

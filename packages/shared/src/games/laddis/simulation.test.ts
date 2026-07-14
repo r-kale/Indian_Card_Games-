@@ -28,10 +28,15 @@ describe('laddis bot simulation', () => {
         const seat = actingSeat(state);
         if (seat === null) {
           // roundOver: check invariants, then continue or end the match.
-          expect(state.tricksTaken.reduce((a, b) => a + b, 0)).toBe(8);
+          const expectedTricks = state.mode === 'vakhaai' ? 4 : 8;
+          expect(state.tricksTaken.reduce((a, b) => a + b, 0)).toBe(expectedTricks);
           const r = state.roundResult!;
           expect(r.deficitAfter).toBeGreaterThanOrEqual(0);
-          expect(state.hukum!.revealed).toBe(true);
+          if (state.mode === 'vakhaai') {
+            expect(state.hukum).toBeNull(); // no trumps in a vakhaai round
+          } else {
+            expect(state.hukum!.revealed).toBe(true);
+          }
           totalRounds++;
           const done = r.deficitAfter >= 32 || state.roundNumber >= 30;
           state = applyAction(state, { type: done ? 'endMatch' : 'nextRound', seat: 0 });

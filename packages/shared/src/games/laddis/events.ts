@@ -24,7 +24,12 @@ export function deriveEvents(prev: LaddisState, next: LaddisState): GameEvent[] 
     next.hukum?.revealed === true &&
     next.phase === 'playing' // the showdown reveal at round end is covered by roundScored
   ) {
-    events.push({ type: 'hukumRevealed', suit: next.hukum.suit });
+    events.push({
+      type: 'hukumRevealed',
+      suit: next.hukum.suit,
+      // The caller must play the hukum next, so they're on mustPlayHukum.
+      caller: next.mustPlayHukum ?? next.turn ?? 0,
+    });
   }
   if (prev.roundResult === null && next.roundResult !== null) {
     events.push({ type: 'roundScored', result: next.roundResult });

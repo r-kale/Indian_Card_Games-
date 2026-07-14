@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cardKey, formatKalyas, SUIT_NAMES, SUITS, VAKHAAI_BETS } from '@icg/shared';
 import type { LaddisAction, LaddisView, RoomState, Seat, Suit, TrickPlay, VakhaaiBet } from '@icg/shared';
 import { CardBack, CardFace } from '../components/CardFace';
@@ -33,6 +33,22 @@ export function LaddisTable() {
     return undefined;
   }, [view.lastTrick, view.lastTrickWinner, view.trick.length]);
   const showLinger = view.trick.length === 0 && linger !== null;
+
+  // Flash the hukum over the playing area the moment someone calls it.
+  const [flash, setFlash] = useState<{ suit: Suit; caller: Seat | null } | null>(null);
+  const wasRevealed = useRef(false);
+  useEffect(() => {
+    const revealed = view.hukum?.revealed === true && view.phase === 'playing';
+    if (revealed && !wasRevealed.current && view.hukum?.suit) {
+      setFlash({ suit: view.hukum.suit, caller: view.mustPlayHukum ?? view.turn });
+      const t = setTimeout(() => setFlash(null), 3000);
+      wasRevealed.current = true;
+      return () => clearTimeout(t);
+    }
+    if (view.hukum === null || !view.hukum.revealed) wasRevealed.current = false;
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.hukum?.revealed, view.phase]);
 
   const actor: Seat | null =
     view.phase === 'vakhaai' || view.phase === 'sixCall'
@@ -81,6 +97,17 @@ export function LaddisTable() {
         />
         {showLinger && (
           <div className="trick-note">{nameOf(linger.winner)} takes the hand</div>
+        )}
+        {flash !== null && (
+          <div className="hukum-flash">
+            <div className={`hukum-flash-suit ${flash.suit === 'H' || flash.suit === 'D' ? 'red' : ''}`}>
+              {SUIT_GLYPH[flash.suit]}
+            </div>
+            <div className="hukum-flash-text">
+              {flash.caller !== null ? `${nameOf(flash.caller)} called it — ` : ''}hukum is{' '}
+              {SUIT_NAMES[flash.suit]}!
+            </div>
+          </div>
         )}
       </div>
       <div className="table-right">{badge(seatAt(1))}</div>
@@ -201,6 +228,10 @@ function LaddisSeatBadge({
   const team = seat % 2;
   const shuffling = team === view.shufflingTeam;
   const offline = entry?.kind === 'human' && !entry.connected;
+  const playOrder =
+    view.phase === 'playing'
+      ? (['1st', '2nd', '3rd', '4th'] as const)[(seat - view.trickLeader + 4) % 4]
+      : null;
   return (
     <div className={`seat-badge ${team === 0 ? 'team-a' : 'team-b'} ${active ? 'active' : ''}`}>
       <div className="seat-badge-name">
@@ -209,6 +240,7 @@ function LaddisSeatBadge({
         {seat === view.seat ? ' (you)' : ''}
       </div>
       <div className="seat-badge-tags">
+        {playOrder !== null && <span className="tag order">{playOrder}</span>}
         {view.dealer === seat && <span className="tag">dealer</span>}
         {shuffling && <span className="tag muted">shuffling</span>}
         {view.hukum?.declarer === seat && <span className="tag bidder">hukum</span>}
@@ -230,6 +262,16 @@ function LaddisSeatBadge({
 }
 
 function HukumStatus({ view, room }: { view: LaddisView; room: RoomState }) {
+  if (view.mode === 'vakhaai') {
+    return (
+      <div className="hukum-panel">
+        <div className="hukum-row">
+          <span className="hukum-label">Vakhaai</span>
+          <span className="partner-status">no trumps — 4 hands only</span>
+        </div>
+      </div>
+    );
+  }
   if (view.hukum === null) return null;
   const declarerName = room.seats[view.hukum.declarer]?.nickname ?? `Seat ${view.hukum.declarer}`;
   const red = view.hukum.suit === 'H' || view.hukum.suit === 'D';
@@ -261,7 +303,7 @@ function LaddisScorePanel({ view, room }: { view: LaddisView; room: RoomState })
   ];
   const target = (team: 0 | 1): string => {
     if (view.mode === 'vakhaai' && view.vakhaai !== null) {
-      return team === view.vakhaai.caller % 2 ? 'caller needs 4 alone' : 'stop the caller';
+      return team === view.vakhaai.caller % 2 ? 'caller needs all 4' : 'stop the caller';
     }
     if (view.mode === 'six') {
       return team === view.shufflingTeam ? 'needs 3' : 'needs 6';
@@ -299,14 +341,14 @@ function VakhaaiDialog({
   onAction: (a: LaddisAction) => void;
 }) {
   const [bet, setBet] = useState<VakhaaiBet | null>(null);
-  const [suit, setSuit] = useState<Suit | null>(null);
   const seat = view.seat as Seat;
   return (
     <div className="dialog-backdrop">
       <div className="dialog declare">
         <h3>Vakhaai?</h3>
         <p className="subtitle">
-          Bet that you'll take <strong>4 hands on your own</strong> (your partner's hands don't
+          Only these <strong>4 cards</strong> are played — 4 hands, <strong>no trumps</strong>,
+          and you lead. You must win <strong>all 4 hands yourself</strong> (your partner's don't
           count). Win: the bet moves your way. Lose: <strong>double</strong> goes against you.
         </p>
         <div className="declare-section">
@@ -323,26 +365,12 @@ function VakhaaiDialog({
             ))}
           </div>
         </div>
-        <div className="declare-section">
-          <div className="declare-label">Your hidden hukum</div>
-          <div className="suit-row">
-            {SUITS.map((s) => (
-              <button
-                key={s}
-                className={`suit-btn ${s === 'H' || s === 'D' ? 'red' : ''} ${suit === s ? 'selected' : ''}`}
-                onClick={() => setSuit(s)}
-              >
-                {SUIT_GLYPH[s]}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="dialog-actions">
           <button onClick={() => onAction({ type: 'passVakhaai', seat })}>Pass</button>
           <button
             className="primary"
-            disabled={bet === null || suit === null}
-            onClick={() => onAction({ type: 'vakhaai', seat, bet: bet!, suit: suit! })}
+            disabled={bet === null}
+            onClick={() => onAction({ type: 'vakhaai', seat, bet: bet! })}
           >
             {bet !== null ? `Vakhaai for ${bet}!` : 'Pick a bet'}
           </button>
@@ -396,8 +424,10 @@ function SixDialog({
       <div className="dialog">
         <h3>Call six hands?</h3>
         <p className="subtitle">
-          Commit your team to <strong>6 of 8 hands</strong>: succeed and the other side pays 6
-          kalyas; fail and it costs your side 12.
+          Commit your team to <strong>6 of 8 hands</strong>:{' '}
+          {view.seat !== null && view.seat % 2 === view.shufflingTeam
+            ? 'succeed and you recover 6 kalyas; fail and your deficit grows by 12.'
+            : 'succeed and the shuffling side pays 6 kalyas; fail and 12 go their way.'}
         </p>
         <div className="dialog-actions">
           <button onClick={() => onAction({ type: 'passSix', seat })}>Pass</button>

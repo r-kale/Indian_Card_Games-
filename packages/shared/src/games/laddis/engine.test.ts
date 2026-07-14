@@ -42,36 +42,56 @@ describe('round flow', () => {
     expect(actingSeat(s)).toBe(1); // non-shuffling (team 1) seat right of dealer 0
   });
 
-  it('hukum declaration deals the rest and opens the six-call window for non-shufflers only', () => {
+  it('hukum declaration deals the rest and opens the six-call window: non-shufflers first, then shufflers', () => {
     let s = fresh();
     s = passVakhaai(s);
     s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
     expect(s.hands.map((h) => h.length)).toEqual([8, 8, 8, 8]);
     expect(s.phase).toBe('sixCall');
-    expect(s.window.turn).toBe(1);
+    expect(s.window.turn).toBe(1); // non-shuffling side first
     s = applyAction(s, { type: 'passSix', seat: 1 });
-    expect(s.window.turn).toBe(3); // skips the shuffling seats 2 and 0? no — skips 2 (shuffling team 0)
+    expect(s.window.turn).toBe(3);
     s = applyAction(s, { type: 'passSix', seat: 3 });
+    expect(s.window.turn).toBe(2); // then the shuffling side gets its chance
+    s = applyAction(s, { type: 'passSix', seat: 2 });
+    expect(s.window.turn).toBe(0);
+    s = applyAction(s, { type: 'passSix', seat: 0 });
     expect(s.phase).toBe('playing');
     expect(s.turn).toBe(1); // right of dealer leads
   });
 
-  it('a vakhaai call locks the round: rest dealt, straight to play, no six window', () => {
+  it('the shuffling side can also call six', () => {
+    let s = fresh();
+    s = passVakhaai(s);
+    s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
+    s = applyAction(s, { type: 'passSix', seat: 1 });
+    s = applyAction(s, { type: 'passSix', seat: 3 });
+    s = applyAction(s, { type: 'callSix', seat: 2 });
+    expect(s.mode).toBe('six');
+    expect(s.six).toEqual({ caller: 2 });
+    expect(s.phase).toBe('playing');
+  });
+
+  it('a vakhaai locks the round: only the 4 dealt cards, no trumps, caller leads', () => {
     let s = fresh();
     s = applyAction(s, { type: 'passVakhaai', seat: 1 });
-    s = applyAction(s, { type: 'vakhaai', seat: 2, bet: 16, suit: 'C' });
+    s = applyAction(s, { type: 'vakhaai', seat: 2, bet: 16 });
     expect(s.mode).toBe('vakhaai');
     expect(s.vakhaai).toEqual({ caller: 2, bet: 16 });
-    expect(s.hukum).toMatchObject({ suit: 'C', declarer: 2, revealed: false });
+    expect(s.hukum).toBeNull(); // no trumps at all
     expect(s.phase).toBe('playing');
-    expect(s.hands.map((h) => h.length)).toEqual([8, 8, 8, 8]);
+    expect(s.hands.map((h) => h.length)).toEqual([4, 4, 4, 4]); // second half never dealt
+    expect(s.undealt).toHaveLength(0);
+    expect(s.turn).toBe(2); // the caller leads
+    // Nobody can call for a hukum in a vakhaai round.
+    expect(legalActions(s, 2 as Seat).every((a) => a.type === 'playCard')).toBe(true);
   });
 
   it('rejects illegal vakhaai bets', () => {
     const s = fresh();
-    expect(() =>
-      applyAction(s, { type: 'vakhaai', seat: 1, bet: 10 as never, suit: 'H' }),
-    ).toThrow(LaddisError);
+    expect(() => applyAction(s, { type: 'vakhaai', seat: 1, bet: 10 as never })).toThrow(
+      LaddisError,
+    );
   });
 });
 
@@ -174,7 +194,7 @@ describe('scoring the ledger', () => {
     expect(r).toMatchObject({ delta: -5, deficitAfter: 2, shufflingTeamAfter: 1, swapped: true });
   });
 
-  it('six-hand call: +6 made, -12 failed', () => {
+  it('six-hand call by the non-shuffling side: +6 made, -12 failed', () => {
     let s = base();
     s.mode = 'six';
     s.six = { caller: 1 };
@@ -188,26 +208,39 @@ describe('scoring the ledger', () => {
     expect(r).toMatchObject({ made: false, delta: -12, deficitAfter: 2, swapped: true });
   });
 
-  it('vakhaai counts only the caller own hands and doubles on a loss', () => {
+  it('six-hand call by the shuffling side: -6 made, +12 failed', () => {
+    let s = base();
+    s.mode = 'six';
+    s.six = { caller: 0 }; // team 0 is shuffling
+    s.tricksTaken = [3, 1, 3, 1];
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: -6, deficitAfter: 4 });
+    s = base();
+    s.mode = 'six';
+    s.six = { caller: 0 };
+    s.tricksTaken = [3, 2, 2, 1]; // only 5
+    expect(scoreRound(s)).toMatchObject({ made: false, delta: 12, deficitAfter: 22 });
+  });
+
+  it('vakhaai (4 tricks): the caller alone must take every hand; losses double', () => {
     let s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 2, bet: 16 }; // caller on the shuffling team
-    s.tricksTaken = [0, 2, 4, 2];
+    s.tricksTaken = [0, 0, 4, 0]; // all four hands
     expect(scoreRound(s)).toMatchObject({ made: true, delta: -16, deficitAfter: 6, swapped: true });
     s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 2, bet: 16 };
-    s.tricksTaken = [2, 2, 3, 1]; // partner tricks don't rescue the caller
+    s.tricksTaken = [0, 1, 3, 0]; // one escaped: vakhaai fails
     expect(scoreRound(s)).toMatchObject({ made: false, delta: 32, deficitAfter: 42 });
     s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 1, bet: 8 }; // caller on the non-shuffling team
-    s.tricksTaken = [2, 4, 1, 1];
+    s.tricksTaken = [0, 4, 0, 0];
     expect(scoreRound(s)).toMatchObject({ made: true, delta: 8, deficitAfter: 18 });
     s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 1, bet: 8 };
-    s.tricksTaken = [3, 3, 1, 1];
+    s.tricksTaken = [0, 3, 0, 1]; // the caller's own partner stole one — still a fail
     expect(scoreRound(s)).toMatchObject({ made: false, delta: -16, swapped: true, deficitAfter: 6 });
   });
 

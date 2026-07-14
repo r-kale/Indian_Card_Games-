@@ -94,7 +94,7 @@ if (process.argv[3] === 'laddis') {
       const before = ls;
       ls = laddisApply(ls, a);
       if (a.type === 'passVakhaai') console.log(`seat ${seat} passes vakhaai`);
-      else if (a.type === 'vakhaai') console.log(`seat ${seat} VAKHAAI ${a.bet} (hukum secretly ${a.suit})`);
+      else if (a.type === 'vakhaai') console.log(`seat ${seat} VAKHAAI ${a.bet} — 4 cards, no trumps, caller leads`);
       else if (a.type === 'declareHukum') console.log(`seat ${seat} sets the hidden hukum (secretly ${a.suit})`);
       else if (a.type === 'passSix') console.log(`seat ${seat} passes the six-call`);
       else if (a.type === 'callSix') console.log(`seat ${seat} CALLS SIX HANDS`);

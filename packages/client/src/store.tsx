@@ -422,7 +422,7 @@ function describeEvent(event: GameEvent, nameOf: (seat: number) => string): stri
       return `\u26A1 ${nameOf(event.seat)}'s team commits to 6 hands!`;
     case 'hukumRevealed': {
       const names = { S: 'Spades \u2660', H: 'Hearts \u2665', D: 'Diamonds \u2666', C: 'Clubs \u2663' } as const;
-      return `Hukum revealed: ${names[event.suit]}`;
+      return `${nameOf(event.caller)} called it \u2014 hukum is ${names[event.suit]}!`;
     }
     case 'roundScored': {
       const r = event.result;

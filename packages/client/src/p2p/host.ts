@@ -24,6 +24,14 @@ import { HEARTBEAT_MS, P2P_CODE_LENGTH, peerIdForCode, peerOptions } from './pro
 import type { GuestToHost, HostToGuest } from './protocol';
 
 const BOT_NAMES = ['Bot Chandu', 'Bot Meena', 'Bot Raju', 'Bot Lakshmi'];
+
+/** crypto.randomUUID with a fallback for older phone browsers. */
+function uuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(16)}-${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+}
 const DISCONNECT_GRACE_MS = 30_000;
 const DEAL_OVER_AUTO_MS = 12_000;
 const MAX_GUESTS = 7;
@@ -54,7 +62,7 @@ export interface HostCallbacks {
  * so hands stay hidden from other guests (only the host machine holds state).
  */
 export class P2PHost {
-  readonly hostToken = crypto.randomUUID();
+  readonly hostToken = uuid();
   readonly code = randomCode();
   private peer: Peer | null = null;
   private readonly players = new Map<string, P2PPlayer>();
@@ -149,8 +157,8 @@ export class P2PHost {
       throw new Error('room full');
     }
     const player: P2PPlayer = {
-      token: crypto.randomUUID(),
-      id: crypto.randomUUID().slice(0, 8),
+      token: uuid(),
+      id: uuid().slice(0, 8),
       nickname: msg.nickname.trim().slice(0, 24) || 'Player',
       connected: true,
       conn,

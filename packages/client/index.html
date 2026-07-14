@@ -6,7 +6,27 @@
     <title>Indian Card Games — 304</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="font-family: sans-serif; color: #f7f4ec; background: #1e6b46; min-height: 100vh; display: flex; align-items: center; justify-content: center">
+        Loading the card table…
+      </div>
+    </div>
+    <script>
+      // After a fresh deploy, a cached copy of this page can point at a
+      // hashed bundle that no longer exists. If the script fails to load,
+      // force one fresh reload instead of showing a dead page.
+      window.addEventListener(
+        'error',
+        function (e) {
+          var t = e.target;
+          if (t && t.tagName === 'SCRIPT' && sessionStorage.getItem('icg-reloaded') !== '1') {
+            sessionStorage.setItem('icg-reloaded', '1');
+            location.reload();
+          }
+        },
+        true,
+      );
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

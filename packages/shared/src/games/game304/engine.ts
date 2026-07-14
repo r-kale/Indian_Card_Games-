@@ -141,9 +141,17 @@ function firstCardNotInHand(hand: readonly Card[]): Card {
   throw new Error('unreachable: hand cannot contain the whole deck');
 }
 
+/** Game state is plain JSON data, so this fallback is lossless on browsers
+ *  that predate structuredClone (older phone browsers). */
+function cloneState(state: Game304State): Game304State {
+  return typeof structuredClone === 'function'
+    ? structuredClone(state)
+    : (JSON.parse(JSON.stringify(state)) as Game304State);
+}
+
 /** Pure reducer: validates the action and returns the next state. Throws IllegalActionError. */
 export function applyAction(state: Game304State, action: Action304): Game304State {
-  const s: Game304State = structuredClone(state);
+  const s: Game304State = cloneState(state);
   switch (action.type) {
     case 'bid':
       applyBid(s, action.seat, action.amount);

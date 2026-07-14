@@ -11,6 +11,9 @@ export const SUITS: readonly Suit[] = ['S', 'H', 'D', 'C'];
 /** 304 trick ranking, high to low. */
 export const RANK_ORDER_304: readonly Rank[] = ['J', '9', 'A', '10', 'K', 'Q', '8', '7'];
 
+/** Standard ranking (Laddis), high to low. */
+export const RANK_ORDER_STANDARD: readonly Rank[] = ['A', 'K', 'Q', 'J', '10', '9', '8', '7'];
+
 export const CARD_POINTS: Record<Rank, number> = {
   J: 30,
   '9': 20,

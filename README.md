@@ -4,8 +4,13 @@ A web-based multiplayer platform for classic Indian card games, played in rooms 
 8 people — no accounts, just a nickname and a shareable 6-character room code. Empty seats
 are filled by simple bots so you can always get a game going.
 
-**Playable now: 304 (Three Nought Four)** — 4-player partnership trick-taking.
-Coming next on the same foundation: **Badam 7 (Sevens)** and **Ladiez**.
+**Playable now:**
+- **304 (Three Nought Four)** — trick-taking with a hidden partner card and open hukum.
+- **Laddis (Ladiez)** — fixed-team trick-taking with the kalya ledger, hidden hukum,
+  vakhaai solo bets and six-hand calls.
+
+Coming next on the same foundation: **Badam 7 (Sevens)**. The host picks the game
+in the lobby; offline vs-bots supports both.
 
 ## Quick start
 
@@ -100,9 +105,22 @@ Design principles:
   implementation (`packages/shared/src/gameAdapter.ts`), so Badam 7 and Ladiez slot in
   as new engine modules without touching the lobby, protocol, or reconnection code.
 
+## How Laddis is played here
+
+- 32-card deck, standard ranking (A K Q J 10 9 8 7); hands (tricks) count, no card points.
+- Fixed teams (seats 0 & 2 vs 1 & 3). One team is **shuffling (pisnhi)** — in deficit on
+  the shared **kalya ledger** (32 kalyas = 1 laddoo, 16 = ardha). The role sticks until
+  the deficit is erased, then swaps with any overshoot carried.
+- 4 cards dealt → **vakhaai window** (bet 8/16/32 kalyas on taking 4 hands alone; partner
+  plays but their hands don't count; lose = double) → otherwise the non-shuffling player
+  right of the dealer sets a **hidden hukum** → remaining 4 dealt → **six-hand window**
+  (non-shufflers may commit to 6 of 8 for +6/−12).
+- The hukum has no power until a player void in the led suit **calls for it** — from then
+  on it trumps, and the caller must play a hukum card in that trick if able.
+- Normal round: shuffling needs 4 hands (win −5 kalyas), non-shuffling needs 5
+  (shuffling loses +10). Host ends the match; the team in deficit loses.
+
 ## Roadmap
 
 - [ ] Badam 7 (Sevens): 3–8 players, shedding game — uses the same room/lobby layer
-- [ ] Ladiez: partnership trick-taking — reuses the generic trick logic in `core/tricks.ts`
-- [ ] Game picker in the lobby
 - [ ] Nicer animations, sounds, and mobile polish

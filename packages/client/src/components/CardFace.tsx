@@ -9,12 +9,15 @@ export function CardFace({
   disabled,
   raised,
   size,
+  showPoints = true,
 }: {
   card: Card;
   onClick?: () => void;
   disabled?: boolean;
   raised?: boolean;
   size?: 'small' | 'normal';
+  /** 304 shows card point values; trick-count games like Laddis do not. */
+  showPoints?: boolean;
 }) {
   const red = card.suit === 'H' || card.suit === 'D';
   const classes = [
@@ -27,7 +30,7 @@ export function CardFace({
   ]
     .filter(Boolean)
     .join(' ');
-  const pts = cardPoints(card);
+  const pts = showPoints ? cardPoints(card) : 0;
   return (
     <button className={classes} onClick={onClick} disabled={disabled || onClick === undefined}>
       <span className="card-rank">{card.rank}</span>

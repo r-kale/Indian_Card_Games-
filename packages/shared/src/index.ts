@@ -9,4 +9,16 @@ export * from './games/game304/scoring';
 export * from './games/game304/events';
 export * from './games/game304/view';
 export * as bot304 from './games/game304/bot';
+export * as laddis from './games/laddis/index';
+export type {
+  LaddisAction,
+  LaddisView,
+  LaddisState,
+  LaddisPhase,
+  RoundResult,
+  RoundMode,
+  VakhaaiBet,
+} from './games/laddis/types';
+export { VAKHAAI_BETS, KALYAS_PER_LADDOO, KALYAS_PER_ARDHA } from './games/laddis/types';
+export { formatKalyas } from './games/laddis/scoring';
 export * from './gameAdapter';

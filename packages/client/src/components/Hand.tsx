@@ -1,27 +1,23 @@
 import { cardKey } from '@icg/shared';
-import type { Card, Player304View } from '@icg/shared';
+import type { Card } from '@icg/shared';
 import { CardFace } from './CardFace';
 
-/**
- * The viewer's own hand, fanned at the bottom. Clicking a card plays it
- * (or selects it as the concealed trump during trump selection).
- */
+/** The viewer's own hand, fanned at the bottom; legal cards are raised. */
 export function Hand({
-  view,
+  cards,
+  playable,
   onPlay,
+  showPoints = true,
 }: {
-  view: Player304View;
+  cards: Card[];
+  playable: Set<string>;
   onPlay: (card: Card) => void;
+  showPoints?: boolean;
 }) {
-  const playable = new Set(
-    view.legalActions
-      .filter((a) => a.type === 'playCard')
-      .map((a) => cardKey((a as { card: Card }).card)),
-  );
   const anyPlayable = playable.size > 0;
   return (
     <div className="hand">
-      {view.hand.map((card) => {
+      {cards.map((card) => {
         const key = cardKey(card);
         const legal = playable.has(key);
         return (
@@ -31,6 +27,7 @@ export function Hand({
             raised={legal}
             disabled={anyPlayable && !legal}
             onClick={legal ? () => onPlay(card) : undefined}
+            showPoints={showPoints}
           />
         );
       })}

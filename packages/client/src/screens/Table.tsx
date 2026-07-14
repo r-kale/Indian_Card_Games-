@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { cardPoints, MATCH_TARGET, matchWinners } from '@icg/shared';
-import type { Seat, TrickPlay } from '@icg/shared';
+import { cardKey, cardPoints, MATCH_TARGET, matchWinners } from '@icg/shared';
+import type { Player304View, Seat, TrickPlay } from '@icg/shared';
 import { BidDialog } from '../components/BidDialog';
 import { DeclareDialog } from '../components/DeclareDialog';
 import { CardFace } from '../components/CardFace';
@@ -15,7 +15,7 @@ const TRICK_LINGER_MS = 2500;
 
 export function Table() {
   const { state, sendAction, toLobby } = useStore();
-  const view = state.view!;
+  const view = state.view as Player304View;
   const room = state.roomState!;
   const me = state.session!.playerId;
   const isHost = room.hostId === me;
@@ -83,7 +83,14 @@ export function Table() {
           <>
             <SeatBadge seat={mySeat} room={room} view={view} active={actor === mySeat} />
             <Hand
-              view={view}
+              cards={view.hand}
+              playable={
+                new Set(
+                  view.legalActions
+                    .filter((a) => a.type === 'playCard')
+                    .map((a) => cardKey((a as { card: (typeof view.hand)[0] }).card)),
+                )
+              }
               onPlay={(card) => {
                 const action = view.legalActions.find(
                   (a) =>

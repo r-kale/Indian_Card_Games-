@@ -9,10 +9,12 @@ export function TrickArea({
   trick,
   perspective,
   winner,
+  showPoints = true,
 }: {
   trick: readonly TrickPlay[];
   perspective: Seat;
   winner: Seat | null;
+  showPoints?: boolean;
 }) {
   return (
     <div className="trick-area">
@@ -22,7 +24,7 @@ export function TrickArea({
         const won = winner !== null && play.seat === winner;
         return (
           <div key={play.seat} className={`trick-card ${pos} ${won ? 'winner' : ''}`}>
-            <CardFace card={play.card} size="small" />
+            <CardFace card={play.card} size="small" showPoints={showPoints} />
             <span className={`trick-order ${order === 0 ? 'lead' : ''}`}>
               {order === 0 ? 'led' : order + 1}
             </span>

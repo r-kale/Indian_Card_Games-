@@ -74,3 +74,42 @@ if (state.dealResult !== null) {
       ` match score ${state.matchScore.join(' / ')} ===`,
   );
 }
+
+// Run a Laddis round instead:  npx tsx packages/shared/scripts/sim.ts [seed] laddis
+if (process.argv[3] === 'laddis') {
+  void (async () => {
+    const { initRound, actingSeat: laddisActing, applyAction: laddisApply } = await import(
+      '../src/games/laddis/engine'
+    );
+    const { chooseAction: laddisBot } = await import('../src/games/laddis/bot');
+    const { redactFor: laddisRedact } = await import('../src/games/laddis/view');
+    const { formatKalyas } = await import('../src/games/laddis/scoring');
+    let ls = initRound({ deficit: 10, shufflingTeam: 0, dealer: 0, seed, roundNumber: 1 });
+    console.log(`\n=== LADDIS, seed "${seed}" — team 0 shuffling, down ${formatKalyas(ls.deficit)} ===`);
+    ls.hands.forEach((h, i) => console.log(`seat ${i} dealt: ${show(h)}`));
+    const lrng = makeRng(`laddis-${seed}`);
+    while (ls.phase !== 'roundOver' && ls.phase !== 'matchOver') {
+      const seat = laddisActing(ls)!;
+      const a = laddisBot(laddisRedact(ls, seat), lrng);
+      const before = ls;
+      ls = laddisApply(ls, a);
+      if (a.type === 'passVakhaai') console.log(`seat ${seat} passes vakhaai`);
+      else if (a.type === 'vakhaai') console.log(`seat ${seat} VAKHAAI ${a.bet} (hukum secretly ${a.suit})`);
+      else if (a.type === 'declareHukum') console.log(`seat ${seat} sets the hidden hukum (secretly ${a.suit})`);
+      else if (a.type === 'passSix') console.log(`seat ${seat} passes the six-call`);
+      else if (a.type === 'callSix') console.log(`seat ${seat} CALLS SIX HANDS`);
+      else if (a.type === 'callHukum') console.log(`seat ${seat} calls for the hukum -> ${ls.hukum!.suit}`);
+      else if (a.type === 'playCard') {
+        console.log(`seat ${seat} plays ${cardKey(a.card)}`);
+        if (ls.trick.length === 0 && ls.lastTrick !== null && before.trick.length === 3) {
+          console.log(`  -> hand to seat ${ls.lastTrickWinner}. Hands: ${ls.tricksTaken.join('/')}`);
+        }
+      }
+    }
+    const r = ls.roundResult!;
+    console.log(
+      `=== round over (${r.mode}): ${r.made ? 'MADE' : 'FAILED'}; team hands ${r.teamTricks.join('-')}; ` +
+        `delta ${r.delta}; ${r.swapped ? 'ROLES SWAP; ' : ''}team ${r.shufflingTeamAfter} now down ${formatKalyas(r.deficitAfter)} ===`,
+    );
+  })();
+}

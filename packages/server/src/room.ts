@@ -1,19 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
-import {
-  actingSeat,
-  applyAction,
-  deriveEvents,
-  initDeal,
-  makeRng,
-  redactFor,
-  bot304,
-  MAX_PLAYERS_PER_ROOM,
-} from '@icg/shared';
+import { engines, makeRng, MAX_PLAYERS_PER_ROOM } from '@icg/shared';
 import type {
-  Action304,
+  AnyGameEngine,
   ClientToServerEvents,
-  Game304State,
+  GameAction,
+  GameId,
   RoomState,
   Rng,
   Seat,
@@ -55,9 +47,14 @@ export class Room {
     null,
   ];
   phase: 'lobby' | 'inGame' = 'lobby';
-  game: Game304State | null = null;
+  gameId: GameId = 'game304';
+  game: unknown = null;
   /** Wall-clock ms since every human disconnected, for garbage collection. */
   emptySince: number | null = null;
+
+  private get engine(): AnyGameEngine {
+    return engines[this.gameId];
+  }
 
   private readonly io: IoServer;
   private readonly botRng: Rng;
@@ -160,6 +157,14 @@ export class Room {
     this.broadcast();
   }
 
+  setGame(token: string, gameId: GameId): void {
+    this.assertLobby();
+    this.assertHost(token);
+    if (!(gameId in engines)) throw new RoomError('unknown game');
+    this.gameId = gameId;
+    this.broadcast();
+  }
+
   start(token: string): void {
     this.assertLobby();
     this.assertHost(token);
@@ -167,11 +172,9 @@ export class Room {
       if (this.seats[i] === null) this.addBotToSeat(i as Seat);
     }
     this.phase = 'inGame';
-    this.game = initDeal({
-      matchScore: [0, 0, 0, 0],
-      dealer: 0,
+    this.game = this.engine.init({
       seed: randomUUID(),
-      dealNumber: 1,
+      hostSeat: this.seatOf(token) ?? 0,
     });
     this.broadcast();
     this.broadcastGame();
@@ -192,19 +195,20 @@ export class Room {
 
   // ---- game actions -----------------------------------------------------
 
-  handleAction(token: string, action: Action304): void {
+  handleAction(token: string, action: GameAction): void {
     if (this.phase !== 'inGame' || this.game === null) throw new RoomError('no game in progress');
     const seat = this.seatOf(token);
     if (seat === null) throw new RoomError('you are spectating this game');
     if (action.seat !== seat) throw new RoomError('cannot act for another seat');
+    if (this.engine.hostOnly(action)) this.assertHost(token);
     this.applyAndBroadcast(action);
   }
 
-  private applyAndBroadcast(action: Action304): void {
+  private applyAndBroadcast(action: GameAction): void {
     const prev = this.game!;
-    const next = applyAction(prev, action);
+    const next: unknown = this.engine.apply(prev, action);
     this.game = next;
-    for (const event of deriveEvents(prev, next)) {
+    for (const event of this.engine.deriveEvents(prev, next)) {
       this.io.to(this.code).emit('game:event', event);
     }
     this.broadcastGame();
@@ -222,8 +226,9 @@ export class Room {
     this.clearTimer();
     if (this.phase !== 'inGame' || this.game === null) return;
     const game = this.game;
+    const kind = this.engine.phaseKind(game);
 
-    if (game.phase === 'matchOver') {
+    if (kind === 'matchOver') {
       this.timer = setTimeout(() => {
         this.phase = 'lobby';
         this.game = null;
@@ -231,21 +236,22 @@ export class Room {
       }, MATCH_OVER_AUTO_MS);
       return;
     }
-    if (game.phase === 'dealOver') {
-      this.timer = setTimeout(() => this.applyAndBroadcast({ type: 'nextDeal', seat: 0 }), DEAL_OVER_AUTO_MS);
+    if (kind === 'roundOver') {
+      this.timer = setTimeout(
+        () => this.applyAndBroadcast(this.engine.autoAdvance(game) as GameAction),
+        DEAL_OVER_AUTO_MS,
+      );
       return;
     }
 
-    const seat = actingSeat(game);
+    const seat = this.engine.actingSeat(game) as Seat | null;
     if (seat === null) return;
     const entry = this.seats[seat];
     if (entry === null) return;
     if (entry.kind === 'bot') {
-      const newTrick =
-        game.phase === 'playing' && game.trick.length === 0 && game.lastTrick !== null;
       this.timer = setTimeout(
         () => this.playBotMove(seat),
-        newTrick ? NEW_TRICK_DELAY_MS() : BOT_DELAY_MS(),
+        this.engine.newTrickPause(game) ? NEW_TRICK_DELAY_MS() : BOT_DELAY_MS(),
       );
       return;
     }
@@ -257,11 +263,11 @@ export class Room {
 
   private playBotMove(seat: Seat): void {
     if (this.phase !== 'inGame' || this.game === null) return;
-    if (actingSeat(this.game) !== seat) return;
+    if (this.engine.actingSeat(this.game) !== seat) return;
     try {
       // Bots get the same redacted view a human at that seat would.
-      const view = redactFor(this.game, seat);
-      const action = bot304.chooseAction(view, this.botRng);
+      const view: unknown = this.engine.viewFor(this.game, seat);
+      const action = this.engine.botAction(view, this.botRng) as GameAction;
       this.applyAndBroadcast(action);
     } catch (err) {
       console.error(`[room ${this.code}] bot move failed:`, err);
@@ -298,7 +304,7 @@ export class Room {
     return {
       code: this.code,
       phase: this.phase,
-      gameId: 'game304',
+      gameId: this.gameId,
       seats,
       spectators: [...this.players.values()]
         .filter((p) => !seated.has(p.token) && p.connected)
@@ -322,7 +328,9 @@ export class Room {
 
   sendGameTo(player: HumanPlayer): void {
     if (this.game === null || player.socketId === null) return;
-    const view = redactFor(this.game, this.seatOf(player.token));
+    const view = this.engine.viewFor(this.game, this.seatOf(player.token)) as Parameters<
+      ServerToClientEvents['game:view']
+    >[0];
     this.io.to(player.socketId).emit('game:view', view);
   }
 

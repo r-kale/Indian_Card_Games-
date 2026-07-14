@@ -21,7 +21,7 @@ export function App() {
 
   return (
     <div className="app">
-      {!state.connected && !state.resuming && (
+      {!state.connected && !state.resuming && state.mode === 'online' && state.session !== null && (
         <div className="banner warn">Connection lost — reconnecting…</div>
       )}
       {state.error !== null && (

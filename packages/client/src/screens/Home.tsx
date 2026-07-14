@@ -7,10 +7,11 @@ function codeFromHash(): string {
 }
 
 export function Home() {
-  const { createRoom, joinRoom } = useStore();
+  const { state, createRoom, joinRoom, startLocalGame } = useStore();
   const [nickname, setNickname] = useState(loadNickname());
   const [code, setCode] = useState(codeFromHash());
   const ready = nickname.trim().length > 0;
+  const online = state.connected;
 
   return (
     <div className="home">
@@ -31,25 +32,44 @@ export function Home() {
       </label>
 
       <div className="home-actions">
-        <button className="primary" disabled={!ready} onClick={() => createRoom(nickname.trim())}>
-          Create a room
+        <button className="primary" disabled={!ready} onClick={() => startLocalGame(nickname)}>
+          Play vs 3 bots
         </button>
-        <div className="join-row">
-          <input
-            value={code}
-            placeholder="ROOM CODE"
-            maxLength={6}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && ready && code.length === 6) joinRoom(code, nickname.trim());
-            }}
-          />
-          <button
-            disabled={!ready || code.length !== 6}
-            onClick={() => joinRoom(code, nickname.trim())}
-          >
-            Join
-          </button>
+
+        <div className="online-box">
+          <div className="online-title">
+            Play online with friends
+            {!online && <span className="tag warn">no game server reachable</span>}
+          </div>
+          {!online && (
+            <p className="online-hint">
+              Online rooms need the game server (<code>npm run dev</code> locally, or a hosted
+              server configured at build time). Solo play works everywhere.
+            </p>
+          )}
+          <div className="online-actions">
+            <button disabled={!ready || !online} onClick={() => createRoom(nickname.trim())}>
+              Create a room
+            </button>
+            <div className="join-row">
+              <input
+                value={code}
+                placeholder="ROOM CODE"
+                maxLength={6}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && ready && online && code.length === 6)
+                    joinRoom(code, nickname.trim());
+                }}
+              />
+              <button
+                disabled={!ready || !online || code.length !== 6}
+                onClick={() => joinRoom(code, nickname.trim())}
+              >
+                Join
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

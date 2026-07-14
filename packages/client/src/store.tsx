@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useReducer } from 'react';
+import { createContext, useContext, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { Action304, GameEvent, Player304View, RoomState, Seat } from '@icg/shared';
+import { LocalGame } from './localGame';
 import { socket } from './socket';
 
 export interface Session {
@@ -16,6 +17,8 @@ export interface Toast {
 
 export interface AppState {
   connected: boolean;
+  /** 'local' = offline vs bots, entirely in the browser (GitHub Pages mode). */
+  mode: 'online' | 'local';
   session: Session | null;
   /** True while we try to resume a stored session on page load. */
   resuming: boolean;
@@ -34,10 +37,12 @@ type AppAction =
   | { type: 'toast'; toast: Toast }
   | { type: 'expireToast'; id: number }
   | { type: 'error'; error: string | null }
+  | { type: 'localStarted'; session: Session; roomState: RoomState }
   | { type: 'leftRoom' };
 
 const initial: AppState = {
   connected: false,
+  mode: 'online',
   session: null,
   resuming: loadSession() !== null,
   roomState: null,
@@ -68,8 +73,17 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
     case 'error':
       return { ...state, error: action.error };
+    case 'localStarted':
+      return {
+        ...state,
+        mode: 'local',
+        session: action.session,
+        roomState: action.roomState,
+        view: null,
+        error: null,
+      };
     case 'leftRoom':
-      return { ...state, session: null, roomState: null, view: null };
+      return { ...state, mode: 'online', session: null, roomState: null, view: null };
   }
 }
 
@@ -106,6 +120,7 @@ export interface StoreApi {
   state: AppState;
   createRoom: (nickname: string) => void;
   joinRoom: (roomCode: string, nickname: string) => void;
+  startLocalGame: (nickname: string) => void;
   leaveRoom: () => void;
   takeSeat: (seat: Seat) => void;
   leaveSeat: () => void;
@@ -121,6 +136,7 @@ const StoreContext = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial);
+  const localGame = useRef<LocalGame | null>(null);
 
   useEffect(() => {
     const onConnect = () => {
@@ -192,7 +208,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'session', session });
       });
     },
+    startLocalGame: (nickname) => {
+      saveNickname(nickname);
+      const game = new LocalGame(nickname.trim() || 'You', (view) =>
+        dispatch({ type: 'view', view }),
+      );
+      localGame.current?.destroy();
+      localGame.current = game;
+      dispatch({
+        type: 'localStarted',
+        session: { roomCode: 'SOLO', token: 'local', playerId: 'local-you' },
+        roomState: game.roomState(),
+      });
+      game.start();
+    },
     leaveRoom: () => {
+      if (localGame.current !== null) {
+        localGame.current.destroy();
+        localGame.current = null;
+        dispatch({ type: 'leftRoom' });
+        return;
+      }
       saveSession(null);
       dispatch({ type: 'leftRoom' });
       socket.disconnect();
@@ -203,8 +239,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addBot: (seat) => socket.emit('lobby:addBot', { seat }, ackOrError(fail)),
     removeBot: (seat) => socket.emit('lobby:removeBot', { seat }, ackOrError(fail)),
     startGame: () => socket.emit('lobby:start', ackOrError(fail)),
-    sendAction: (action) => socket.emit('game:action', { action }, ackOrError(fail)),
-    toLobby: () => socket.emit('room:toLobby', ackOrError(fail)),
+    sendAction: (action) => {
+      if (localGame.current !== null) {
+        try {
+          localGame.current.dispatch(action);
+        } catch (err) {
+          fail(err instanceof Error ? err.message : 'illegal move');
+        }
+        return;
+      }
+      socket.emit('game:action', { action }, ackOrError(fail));
+    },
+    toLobby: () => {
+      if (localGame.current !== null) {
+        // Offline games have no lobby; ending one returns to the home screen.
+        api.leaveRoom();
+        return;
+      }
+      socket.emit('room:toLobby', ackOrError(fail));
+    },
     clearError: () => dispatch({ type: 'error', error: null }),
   };
 

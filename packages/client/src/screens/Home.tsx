@@ -88,7 +88,8 @@ export function Home() {
 
       <div className="rules-note">
         <strong>How 304 works:</strong> 32 cards, J &gt; 9 &gt; A &gt; 10 &gt; K &gt; Q &gt; 8 &gt; 7.
-        Bid 160+ points for your team, hide a trump card, then win tricks to make your bid.
+        Bid 160+ (in tens), declare the hukum openly, and name a partner card — whoever holds it
+        is secretly your partner until it hits the table. Trump only wins from a void hand.
       </div>
     </div>
   );

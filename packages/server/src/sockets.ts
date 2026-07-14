@@ -59,7 +59,9 @@ export function wireSockets(io: IoServer, rooms: RoomManager): void {
       inRoom(socket, rooms, ack, (room, token) => room.leaveSeat(token)),
     );
     socket.on('lobby:addBot', (p, ack) =>
-      inRoom(socket, rooms, ack, (room, token) => room.addBot(token, requireSeat(p?.seat))),
+      inRoom(socket, rooms, ack, (room, token) =>
+        room.addBot(token, requireSeat(p?.seat), typeof p?.name === 'string' ? p.name : undefined),
+      ),
     );
     socket.on('lobby:removeBot', (p, ack) =>
       inRoom(socket, rooms, ack, (room, token) => room.removeBot(token, requireSeat(p?.seat))),

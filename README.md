@@ -53,18 +53,20 @@ npm run typecheck  # strict TS across all packages
 npx tsx packages/shared/scripts/sim.ts [seed]   # print a bot-vs-bot deal turn by turn
 ```
 
-## How 304 is played here
+## How 304 is played here (hidden-partner variant)
 
-- 32-card deck (7–A), teams of two sitting opposite (seats 0 & 2 vs 1 & 3).
+- 32-card deck (7–A), 8 cards each, all dealt up front.
 - Card rank (high→low): **J, 9, A, 10, K, Q, 8, 7**; points J=30, 9=20, A=11, 10=10, K=3, Q=2
   (304 points per deal).
-- Four cards are dealt, then bidding: the player right of the dealer must open at 160+,
-  others raise or pass. The winning bidder places one card **face down as the concealed
-  trump**, the rest of the deck is dealt, and play begins.
-- Follow suit if you can. If you're void, you may ask for the trump to be revealed
-  (you must then play a trump if you hold one). While concealed, the trump suit has no power.
-- The bidding team must capture at least its bid in points. Making a bid earns 1 match
-  point (2 for bids of 250+); failing gives the defenders 2. First team to 6 wins the match.
+- Bidding: the player right of the dealer must open at 160+; raises go in steps of 10
+  (304 is the top bid); pass and you're out.
+- The bid winner **openly declares the hukum (trump suit)** and names a **partner card**
+  they don't hold. Whoever holds that card is secretly the bidder's partner for the deal.
+- The partnership stays hidden until the partner card is played. The bidder can force the
+  reveal by **leading the partner-card suit** — the holder must then play it.
+- Follow suit if you can; trump can only be played (and only wins) from a void hand.
+- The bidder + partner must capture at least the bid in points. Each player on the winning
+  side scores +1; partnerships reshuffle every deal, and the first player to 5 wins the match.
 
 ## Architecture
 

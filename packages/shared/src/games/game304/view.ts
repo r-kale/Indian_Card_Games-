@@ -4,20 +4,18 @@ import type { Game304State, Player304View, Seat } from './types';
 
 /**
  * Produce the redacted view one seat (or a spectator) may see.
- * Other players' hands become counts; the concealed trump stays hidden from
- * everyone except the bidder; the undealt pile is never exposed.
+ * Other players' hands become counts; the partner card is public but the
+ * holder's seat stays hidden until revealed (the holder knows themself).
  */
 export function redactFor(state: Game304State, seat: Seat | null): Player304View {
-  const isBidder = seat !== null && state.bid !== null && state.bid.bidder === seat;
-  let trump: Player304View['trump'] = null;
-  if (state.trump !== null) {
-    if (state.trump.revealed) {
-      trump = { revealed: true, suit: state.trump.suit, card: state.trump.card };
-    } else if (isBidder) {
-      trump = { revealed: false, suit: state.trump.suit, card: state.trump.card };
-    } else {
-      trump = { revealed: false, suit: null, card: null };
-    }
+  let partner: Player304View['partner'] = null;
+  if (state.partner !== null) {
+    const knowsSeat = state.partner.revealed || state.partner.seat === seat;
+    partner = {
+      card: state.partner.card,
+      revealed: state.partner.revealed,
+      seat: knowsSeat ? state.partner.seat : null,
+    };
   }
   return {
     seat,
@@ -33,11 +31,11 @@ export function redactFor(state: Game304State, seat: Seat | null): Player304View
     ],
     bidding: state.bidding,
     bid: state.bid,
-    trump,
+    trumpSuit: state.trumpSuit,
+    partner,
     turn: state.turn,
     trick: state.trick,
     trickLeader: state.trickLeader,
-    mustPlayTrump: state.mustPlayTrump,
     capturedPoints: state.capturedPoints,
     tricksTaken: state.tricksTaken,
     lastTrick: state.lastTrick,

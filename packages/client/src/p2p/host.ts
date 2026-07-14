@@ -210,10 +210,11 @@ export class P2PHost {
     this.broadcast();
   }
 
-  addBot(seat: Seat): void {
+  addBot(seat: Seat, name?: string): void {
     if (this.phase !== 'lobby') throw new Error('not in the lobby');
     if (this.seats[seat] !== null) throw new Error('seat is taken');
-    this.seats[seat] = { kind: 'bot', name: this.freeBotName(seat) };
+    const custom = name?.trim().slice(0, 20);
+    this.seats[seat] = { kind: 'bot', name: custom || this.freeBotName(seat) };
     this.broadcast();
   }
 
@@ -232,7 +233,7 @@ export class P2PHost {
     }
     this.phase = 'inGame';
     this.game = initDeal({
-      matchScore: [0, 0],
+      matchScore: [0, 0, 0, 0],
       dealer: 0,
       seed: `p2p-${Date.now()}-${Math.random()}`,
       dealNumber: 1,
@@ -290,7 +291,12 @@ export class P2PHost {
     const entry = this.seats[seat];
     if (entry === null) return;
     if (entry.kind === 'bot') {
-      this.timer = setTimeout(() => this.playBotMove(seat), 600 + Math.random() * 600);
+      const newTrick =
+        game.phase === 'playing' && game.trick.length === 0 && game.lastTrick !== null;
+      this.timer = setTimeout(
+        () => this.playBotMove(seat),
+        newTrick ? 2300 + Math.random() * 400 : 600 + Math.random() * 600,
+      );
       return;
     }
     const player = this.players.get(entry.token);

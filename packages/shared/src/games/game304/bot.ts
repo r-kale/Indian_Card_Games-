@@ -1,13 +1,14 @@
 import { cardPoints, rankIndex, RANK_ORDER_304, SUITS } from '../../core/cards';
-import type { Card, Suit } from '../../core/cards';
+import type { Card, Rank, Suit } from '../../core/cards';
 import { beatsCurrentTrick, trickWinner } from '../../core/tricks';
-import { MIN_BID, partnerOf } from './types';
-import type { Action304, Player304View } from './types';
+import { BID_STEP, MIN_BID } from './types';
+import type { Action304, Player304View, Seat } from './types';
 import type { Rng } from '../../core/rng';
 
 /**
- * Simple rule-following bot. It only ever sees a redacted Player304View and
- * only ever returns one of view.legalActions, so it cannot cheat.
+ * Simple rule-following bot. It only ever sees a redacted Player304View, so
+ * it cannot cheat — it does not know who the hidden partner is any more than
+ * a human in its seat would.
  */
 export function chooseAction(view: Player304View, rng: Rng): Action304 {
   const actions = view.legalActions;
@@ -15,8 +16,8 @@ export function chooseAction(view: Player304View, rng: Rng): Action304 {
   switch (view.phase) {
     case 'bidding':
       return chooseBid(view, actions);
-    case 'trumpSelection':
-      return chooseTrump(view, actions);
+    case 'declaring':
+      return chooseDeclaration(view);
     case 'playing':
       return choosePlay(view, actions, rng);
     case 'dealOver':
@@ -26,7 +27,7 @@ export function chooseAction(view: Player304View, rng: Rng): Action304 {
   }
 }
 
-/** Rough strength of the first 4 cards: honour points plus long-suit potential. */
+/** Rough strength of the full 8-card hand: honour points plus long-suit potential. */
 function handStrength(hand: readonly Card[]): number {
   let strength = 0;
   for (const c of hand) {
@@ -34,7 +35,7 @@ function handStrength(hand: readonly Card[]): number {
   }
   for (const suit of SUITS) {
     const inSuit = hand.filter((c) => c.suit === suit);
-    if (inSuit.length >= 2 && inSuit.some((c) => c.rank === 'J' || c.rank === '9')) {
+    if (inSuit.length >= 3 && inSuit.some((c) => c.rank === 'J' || c.rank === '9')) {
       strength += 15;
     }
   }
@@ -46,88 +47,102 @@ function chooseBid(view: Player304View, actions: readonly Action304[]): Action30
   const pass = actions.find((a) => a.type === 'pass');
   if (bid === undefined) return pass!;
   if (pass === undefined) return bid; // forced opener
-  const ceiling = MIN_BID + Math.floor(handStrength(view.hand) / 2);
+  const ceiling =
+    MIN_BID + Math.floor(handStrength(view.hand) / 2 / BID_STEP) * BID_STEP;
   return bid.type === 'bid' && bid.amount <= ceiling ? bid : pass;
 }
 
-function chooseTrump(view: Player304View, actions: readonly Action304[]): Action304 {
-  // Longest suit (ties broken by captured points in the suit), lowest card of it.
-  let bestSuit: Suit = view.hand[0]!.suit;
+function chooseDeclaration(view: Player304View): Action304 {
+  const hand = view.hand;
+  // Hukum: our longest suit (ties broken by points held in it).
+  let trumpSuit: Suit = hand[0]!.suit;
   let bestScore = -1;
   for (const suit of SUITS) {
-    const inSuit = view.hand.filter((c) => c.suit === suit);
+    const inSuit = hand.filter((c) => c.suit === suit);
     const score = inSuit.length * 100 + inSuit.reduce((s, c) => s + cardPoints(c), 0);
     if (inSuit.length > 0 && score > bestScore) {
       bestScore = score;
-      bestSuit = suit;
+      trumpSuit = suit;
     }
   }
-  const candidates = actions.filter(
-    (a): a is Extract<Action304, { type: 'selectTrump' }> =>
-      a.type === 'selectTrump' && a.card.suit === bestSuit,
-  );
-  return weakest(candidates)!;
+  // Partner card: the strongest card we do NOT hold — J of trump first, then
+  // 9 of trump, then the big honours elsewhere.
+  const wanted: Card[] = [];
+  for (const rank of ['J', '9'] as Rank[]) wanted.push({ rank, suit: trumpSuit });
+  for (const rank of ['J', '9', 'A'] as Rank[]) {
+    for (const suit of SUITS) {
+      if (suit !== trumpSuit) wanted.push({ rank, suit });
+    }
+  }
+  const partnerCard = wanted.find(
+    (w) => !hand.some((c) => c.rank === w.rank && c.suit === w.suit),
+  )!;
+  return { type: 'declare', seat: view.seat as Seat, trumpSuit, partnerCard };
+}
+
+/** Seats this bot KNOWS are on its side (partnerships are secret until revealed). */
+function knownAllies(view: Player304View): Set<number> {
+  const allies = new Set<number>();
+  if (view.seat === null || view.bid === null || view.partner === null) return allies;
+  const me = view.seat;
+  const bidder = view.bid.bidder;
+  const partnerSeat = view.partner.seat; // null unless revealed or we ARE the partner
+  if (me === bidder) {
+    if (partnerSeat !== null) allies.add(partnerSeat);
+  } else if (partnerSeat === me) {
+    allies.add(bidder);
+  } else if (partnerSeat !== null) {
+    // Partner is known and it isn't us: we're a defender; the other defender
+    // is whoever is neither bidder nor partner nor us.
+    for (let s = 0; s < 4; s++) {
+      if (s !== me && s !== bidder && s !== partnerSeat) allies.add(s);
+    }
+  }
+  return allies;
 }
 
 function choosePlay(view: Player304View, actions: readonly Action304[], rng: Rng): Action304 {
   const plays = actions.filter(
     (a): a is Extract<Action304, { type: 'playCard' }> => a.type === 'playCard',
   );
-  const reveal = actions.find((a) => a.type === 'revealTrump');
-  const trumpSuit = view.trump !== null && view.trump.revealed ? view.trump.suit : null;
+  if (plays.length === 1) return plays[0]!;
+  const trumpSuit = view.trumpSuit;
 
-  if (reveal !== undefined && shouldReveal(view)) return reveal;
-
-  // Leading: put our strongest card out (J and 9 are the bosses in 304).
+  // Leading a trick.
   if (view.trick.length === 0) {
-    const strongest = plays.reduce((best, a) =>
-      rankIndex(a.card.rank, RANK_ORDER_304) < rankIndex(best.card.rank, RANK_ORDER_304) ? a : best,
-    );
-    return strongest;
+    // The bidder can out their hidden partner by leading the partner suit.
+    if (
+      view.seat === view.bid?.bidder &&
+      view.partner !== null &&
+      !view.partner.revealed &&
+      rng() < 0.5
+    ) {
+      const outing = plays.filter((a) => a.card.suit === view.partner!.card.suit);
+      if (outing.length > 0) return strongest(outing);
+    }
+    return strongest(plays);
   }
 
   const winnerSoFar = trickWinner(view.trick, RANK_ORDER_304, trumpSuit);
-  const partnerWinning = view.seat !== null && winnerSoFar === partnerOf(view.seat);
+  if (knownAllies(view).has(winnerSoFar)) return cheapest(plays);
 
-  if (!partnerWinning) {
-    const winning = plays.filter((a) =>
-      beatsCurrentTrick(a.card, view.trick, RANK_ORDER_304, trumpSuit),
-    );
-    if (winning.length > 0) return cheapestThatWins(winning);
-  }
-  // Partner already has it, or we cannot win: throw the cheapest card away.
-  void rng;
+  const winning = plays.filter((a) =>
+    beatsCurrentTrick(a.card, view.trick, RANK_ORDER_304, trumpSuit),
+  );
+  if (winning.length > 0) return cheapest(winning);
   return cheapest(plays);
 }
 
-function shouldReveal(view: Player304View): boolean {
-  const isBidder = view.bid !== null && view.bid.bidder === view.seat;
-  if (isBidder && view.trump !== null && view.trump.suit !== null) {
-    // Reveal only if one of our trumps would actually take this trick.
-    const suit = view.trump.suit;
-    return view.hand
-      .filter((c) => c.suit === suit)
-      .some((c) => beatsCurrentTrick(c, view.trick, RANK_ORDER_304, suit));
-  }
-  // Defenders gamble on a reveal only when the trick is worth taking.
-  const trickPoints = view.trick.reduce((s, p) => s + cardPoints(p.card), 0);
-  return trickPoints >= 15;
-}
+type PlayLike = Extract<Action304, { type: 'playCard' }>;
 
-type PlayLike = Extract<Action304, { type: 'playCard' } | { type: 'selectTrump' }>;
-
-function cheapest<A extends PlayLike>(plays: readonly A[]): A {
-  return [...plays].sort((a, b) => costOf(a.card) - costOf(b.card))[0]!;
-}
-
-function cheapestThatWins<A extends PlayLike>(plays: readonly A[]): A {
-  return cheapest(plays);
-}
-
-function weakest<A extends PlayLike>(plays: readonly A[]): A | undefined {
+function strongest(plays: readonly PlayLike[]): PlayLike {
   return [...plays].sort(
-    (a, b) => rankIndex(b.card.rank, RANK_ORDER_304) - rankIndex(a.card.rank, RANK_ORDER_304),
-  )[0];
+    (a, b) => rankIndex(a.card.rank, RANK_ORDER_304) - rankIndex(b.card.rank, RANK_ORDER_304),
+  )[0]!;
+}
+
+function cheapest(plays: readonly PlayLike[]): PlayLike {
+  return [...plays].sort((a, b) => costOf(a.card) - costOf(b.card))[0]!;
 }
 
 /** Prefer giving up fewer points; among equals, keep the stronger rank in hand. */

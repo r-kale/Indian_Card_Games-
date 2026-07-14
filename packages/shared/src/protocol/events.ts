@@ -1,5 +1,5 @@
-import type { Suit } from '../core/cards';
-import type { Action304, DealResult, Player304View, Seat, Team } from '../games/game304/types';
+import type { Card } from '../core/cards';
+import type { Action304, DealResult, Player304View, Seat } from '../games/game304/types';
 import type { RoomState } from './room';
 
 export type Ack<T = Record<never, never>> = ({ ok: true } & T) | { ok: false; error: string };
@@ -8,9 +8,9 @@ export type AckFn<T = Record<never, never>> = (result: Ack<T>) => void;
 /** Ephemeral cues for animations and toasts; state lives in game:view. */
 export type GameEvent =
   | { type: 'trickWon'; seat: Seat; points: number }
-  | { type: 'trumpRevealed'; suit: Suit }
+  | { type: 'partnerRevealed'; seat: Seat; card: Card }
   | { type: 'dealScored'; result: DealResult }
-  | { type: 'matchOver'; winner: Team };
+  | { type: 'matchOver'; winners: Seat[] };
 
 export interface ClientToServerEvents {
   'room:create': (p: { nickname: string }, ack: AckFn<{ roomCode: string; token: string; playerId: string }>) => void;
@@ -18,7 +18,7 @@ export interface ClientToServerEvents {
   'room:rejoin': (p: { roomCode: string; token: string }, ack: AckFn<{ playerId: string; nickname: string }>) => void;
   'lobby:takeSeat': (p: { seat: Seat }, ack: AckFn) => void;
   'lobby:leaveSeat': (ack: AckFn) => void;
-  'lobby:addBot': (p: { seat: Seat }, ack: AckFn) => void;
+  'lobby:addBot': (p: { seat: Seat; name?: string }, ack: AckFn) => void;
   'lobby:removeBot': (p: { seat: Seat }, ack: AckFn) => void;
   'lobby:start': (ack: AckFn) => void;
   'game:action': (p: { action: Action304 }, ack: AckFn) => void;

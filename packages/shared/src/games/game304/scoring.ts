@@ -1,28 +1,42 @@
-import { BIG_BID, MATCH_TARGET, teamOf } from './types';
+import type { Card, Suit } from '../../core/cards';
+import { MATCH_TARGET } from './types';
 import type { DealResult, Seat } from './types';
 
 /**
- * Score a finished deal. The bidding team must capture at least the bid;
- * making it earns 1 match point (2 for a big bid of 250+), failing gives
- * the defenders 2 match points.
+ * Score a finished deal: the bidder + partner must capture at least the bid.
+ * Each player on the winning side gets +1 match point.
  */
 export function scoreDeal(
-  capturedPoints: [number, number],
+  capturedPoints: [number, number, number, number],
   bid: { amount: number; bidder: Seat },
+  partnerSeat: Seat,
+  partnerCard: Card,
+  trumpSuit: Suit,
 ): DealResult {
-  const bidTeam = teamOf(bid.bidder);
-  const madeIt = capturedPoints[bidTeam] >= bid.amount;
-  const deltas: [number, number] = [0, 0];
-  if (madeIt) {
-    deltas[bidTeam] = bid.amount >= BIG_BID ? 2 : 1;
-  } else {
-    deltas[(1 - bidTeam) as 0 | 1] = 2;
+  const bidTeamPoints = capturedPoints[bid.bidder] + capturedPoints[partnerSeat];
+  const madeIt = bidTeamPoints >= bid.amount;
+  const deltas: DealResult['deltas'] = [0, 0, 0, 0];
+  for (let seat = 0; seat < 4; seat++) {
+    const onBidTeam = seat === bid.bidder || seat === partnerSeat;
+    if (onBidTeam === madeIt) deltas[seat] = 1;
   }
-  return { bid: bid.amount, bidder: bid.bidder, bidTeam, capturedPoints, madeIt, deltas };
+  return {
+    bid: bid.amount,
+    bidder: bid.bidder,
+    partnerSeat,
+    partnerCard,
+    trumpSuit,
+    bidTeamPoints,
+    madeIt,
+    deltas,
+  };
 }
 
-export function matchWinner(matchScore: [number, number]): 0 | 1 | null {
-  if (matchScore[0] >= MATCH_TARGET) return 0;
-  if (matchScore[1] >= MATCH_TARGET) return 1;
-  return null;
+/** Seats that have reached the match target (usually a pair, occasionally one). */
+export function matchWinners(matchScore: [number, number, number, number]): Seat[] {
+  const winners: Seat[] = [];
+  for (let seat = 0; seat < 4; seat++) {
+    if (matchScore[seat]! >= MATCH_TARGET) winners.push(seat as Seat);
+  }
+  return winners;
 }

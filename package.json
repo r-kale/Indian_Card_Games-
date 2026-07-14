@@ -1,0 +1,18 @@
+{
+  "name": "indian-card-games",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multiplayer Indian card games: 304, Badam 7, Ladiez",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w @icg/server\" \"npm run dev -w @icg/client\"",
+    "test": "vitest run --root packages/shared",
+    "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p packages/server && tsc --noEmit -p packages/client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

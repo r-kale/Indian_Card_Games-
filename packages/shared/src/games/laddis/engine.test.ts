@@ -244,11 +244,32 @@ describe('scoring the ledger', () => {
     expect(scoreRound(s)).toMatchObject({ made: false, delta: -16, swapped: true, deficitAfter: 6 });
   });
 
-  it('formats kalyas into laddoos', () => {
+  it('formats kalyas as plain numbers (no laddoo/ardha wording)', () => {
     expect(formatKalyas(0)).toBe('0 kalyas');
-    expect(formatKalyas(16)).toBe('ardha');
-    expect(formatKalyas(37)).toBe('1 laddoo + 5 kalyas');
-    expect(formatKalyas(48)).toBe('1 laddoo + ardha');
+    expect(formatKalyas(1)).toBe('1 kalya');
+    expect(formatKalyas(16)).toBe('16 kalyas');
+    expect(formatKalyas(37)).toBe('37 kalyas');
+  });
+
+  it('the host can end the match at any point; the ledger stands', () => {
+    // Mid-play: a side that is clearly lost can concede without finishing the round.
+    let s = fresh();
+    s = passVakhaai(s);
+    s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
+    for (const seat of [1, 3, 2, 0] as const) {
+      s = applyAction(s, { type: 'passSix', seat });
+    }
+    expect(s.phase).toBe('playing');
+    const ended = applyAction(s, { type: 'endMatch', seat: 0 });
+    expect(ended.phase).toBe('matchOver');
+    expect(ended.deficit).toBe(10); // unfinished round is abandoned, ledger unchanged
+    expect(ended.hukum!.revealed).toBe(true); // showdown
+    expect(actingSeat(ended)).toBeNull();
+    // But never twice.
+    expect(() => applyAction(ended, { type: 'endMatch', seat: 0 })).toThrow(LaddisError);
+    // Ending from a window phase works too.
+    const inWindow = fresh();
+    expect(applyAction(inWindow, { type: 'endMatch', seat: 0 }).phase).toBe('matchOver');
   });
 });
 

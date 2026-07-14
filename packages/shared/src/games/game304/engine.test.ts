@@ -84,6 +84,8 @@ describe('declaring', () => {
     const partnerCard = s.hands[3][0]!;
     s = applyAction(s, { type: 'declare', seat: 1, trumpSuit: 'H', partnerCard });
     expect(s.phase).toBe('playing');
+    expect(s.turn).toBe(1); // the bid winner leads the first trick
+    expect(s.trickLeader).toBe(1);
     expect(s.trumpSuit).toBe('H');
     expect(s.partner).toMatchObject({ card: partnerCard, seat: 3, revealed: false });
     // Everyone sees the card; only the holder knows the seat.

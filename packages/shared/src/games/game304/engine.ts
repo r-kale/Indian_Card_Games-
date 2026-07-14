@@ -216,8 +216,9 @@ function applyDeclare(s: Game304State, seat: Seat, trumpSuit: Suit, partnerCard:
   s.trumpSuit = trumpSuit;
   s.partner = { card: partnerCard, seat: partnerSeat, revealed: false };
   s.phase = 'playing';
-  s.turn = nextSeat(s.dealer);
-  s.trickLeader = nextSeat(s.dealer);
+  // The bid winner leads the first trick.
+  s.turn = seat;
+  s.trickLeader = seat;
 }
 
 function applyPlayCard(s: Game304State, seat: Seat, card: Card): void {

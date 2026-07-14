@@ -9,13 +9,21 @@ import type {
   GameView,
   Rng,
   RoomState,
-  Seat,
   SeatInfo,
 } from '@icg/shared';
 import { HEARTBEAT_MS, P2P_CODE_LENGTH, peerIdForCode, peerOptions } from './protocol';
 import type { GuestToHost, HostToGuest } from './protocol';
 
-const BOT_NAMES = ['Bot Chandu', 'Bot Meena', 'Bot Raju', 'Bot Lakshmi'];
+const BOT_NAMES = [
+  'Bot Chandu',
+  'Bot Meena',
+  'Bot Raju',
+  'Bot Lakshmi',
+  'Bot Ganpat',
+  'Bot Shalu',
+  'Bot Pinky',
+  'Bot Bablu',
+];
 
 /** crypto.randomUUID with a fallback for older phone browsers. */
 function uuid(): string {
@@ -58,12 +66,7 @@ export class P2PHost {
   readonly code = randomCode();
   private peer: Peer | null = null;
   private readonly players = new Map<string, P2PPlayer>();
-  private seats: [SeatEntry | null, SeatEntry | null, SeatEntry | null, SeatEntry | null] = [
-    null,
-    null,
-    null,
-    null,
-  ];
+  private seats: (SeatEntry | null)[] = [null, null, null, null];
   private phase: 'lobby' | 'inGame' = 'lobby';
   private gameId: GameId = 'game304';
   private game: unknown = null;
@@ -195,8 +198,9 @@ export class P2PHost {
 
   // ---- lobby & game (host-invoked directly, guest-invoked via messages) ---
 
-  takeSeat(token: string, seat: Seat): void {
+  takeSeat(token: string, seat: number): void {
     if (this.phase !== 'lobby') throw new Error('not in the lobby');
+    this.assertSeatIndex(seat);
     if (this.seats[seat] !== null) throw new Error('seat is taken');
     const current = this.seatOf(token);
     if (current !== null) this.seats[current] = null;
@@ -211,8 +215,9 @@ export class P2PHost {
     this.broadcast();
   }
 
-  addBot(seat: Seat, name?: string): void {
+  addBot(seat: number, name?: string): void {
     if (this.phase !== 'lobby') throw new Error('not in the lobby');
+    this.assertSeatIndex(seat);
     if (this.seats[seat] !== null) throw new Error('seat is taken');
     const custom = name?.trim().slice(0, 20);
     this.seats[seat] = { kind: 'bot', name: custom || this.freeBotName(seat) };
@@ -223,14 +228,28 @@ export class P2PHost {
     if (this.phase !== 'lobby') throw new Error('not in the lobby');
     if (!(gameId in engines)) throw new Error('unknown game');
     this.gameId = gameId;
+    this.resizeSeats();
     this.broadcast();
+  }
+
+  /** In the lobby, show one slot per possible seat for the selected game. */
+  private resizeSeats(): void {
+    const size = this.engine.maxSeats;
+    while (this.seats.length > size) this.seats.pop();
+    while (this.seats.length < size) this.seats.push(null);
+  }
+
+  private assertSeatIndex(seat: number): void {
+    if (!Number.isInteger(seat) || seat < 0 || seat >= this.seats.length) {
+      throw new Error('bad seat');
+    }
   }
 
   private get engine(): AnyGameEngine {
     return engines[this.gameId];
   }
 
-  removeBot(seat: Seat): void {
+  removeBot(seat: number): void {
     if (this.seats[seat]?.kind !== 'bot') throw new Error('no bot on that seat');
     this.seats[seat] = null;
     this.broadcast();
@@ -238,15 +257,25 @@ export class P2PHost {
 
   start(): void {
     if (this.phase !== 'lobby') throw new Error('not in the lobby');
-    for (let i = 0; i < 4; i++) {
-      if (this.seats[i] === null) {
-        this.seats[i] = { kind: 'bot', name: this.freeBotName(i as Seat) };
+    if (this.engine.minSeats === this.engine.maxSeats) {
+      for (let i = 0; i < this.seats.length; i++) {
+        if (this.seats[i] === null) {
+          this.seats[i] = { kind: 'bot', name: this.freeBotName(i) };
+        }
+      }
+    } else {
+      // Variable-size game (Badam 7): play with whoever is seated; fewer than
+      // four seated players get bot company up to a table of four.
+      this.seats = this.seats.filter((s) => s !== null);
+      while (this.seats.length < 4) {
+        this.seats.push({ kind: 'bot', name: this.freeBotName(this.seats.length) });
       }
     }
     this.phase = 'inGame';
     this.game = this.engine.init({
       seed: `p2p-${Date.now()}-${Math.random()}`,
       hostSeat: this.seatOf(this.hostToken) ?? 0,
+      players: this.seats.length,
     });
     this.broadcast();
     this.broadcastGame();
@@ -256,6 +285,7 @@ export class P2PHost {
   toLobby(): void {
     this.phase = 'lobby';
     this.game = null;
+    this.resizeSeats();
     this.clearTimer();
     this.broadcast();
   }
@@ -300,9 +330,9 @@ export class P2PHost {
       );
       return;
     }
-    const seat = this.engine.actingSeat(game) as Seat | null;
+    const seat = this.engine.actingSeat(game) as number | null;
     if (seat === null) return;
-    const entry = this.seats[seat];
+    const entry = this.seats[seat] ?? null;
     if (entry === null) return;
     if (entry.kind === 'bot') {
       this.timer = setTimeout(
@@ -319,7 +349,7 @@ export class P2PHost {
     }
   }
 
-  private playBotMove(seat: Seat): void {
+  private playBotMove(seat: number): void {
     if (this.destroyed || this.phase !== 'inGame' || this.game === null) return;
     if (this.engine.actingSeat(this.game) !== seat) return;
     try {
@@ -380,15 +410,15 @@ export class P2PHost {
 
   // ---- helpers ---------------------------------------------------------------
 
-  private seatOf(token: string): Seat | null {
-    for (let i = 0; i < 4; i++) {
+  private seatOf(token: string): number | null {
+    for (let i = 0; i < this.seats.length; i++) {
       const entry = this.seats[i];
-      if (entry?.kind === 'human' && entry.token === token) return i as Seat;
+      if (entry?.kind === 'human' && entry.token === token) return i;
     }
     return null;
   }
 
-  private freeBotName(seat: Seat): string {
+  private freeBotName(seat: number): string {
     const used = new Set(
       this.seats
         .filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot')

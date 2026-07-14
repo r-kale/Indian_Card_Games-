@@ -1,6 +1,7 @@
 import { useStore } from './store';
 import { Home } from './screens/Home';
 import { Lobby } from './screens/Lobby';
+import { BadamTable } from './screens/BadamTable';
 import { LaddisTable } from './screens/LaddisTable';
 import { Table } from './screens/Table';
 
@@ -19,6 +20,8 @@ export function App() {
       state.view !== null ? (
         state.roomState.gameId === 'laddis' ? (
           <LaddisTable />
+        ) : state.roomState.gameId === 'badam7' ? (
+          <BadamTable />
         ) : (
           <Table />
         )

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { GameAction, GameEvent, GameId, GameView, RoomState, Seat } from '@icg/shared';
+import type { GameAction, GameEvent, GameId, GameView, RoomState } from '@icg/shared';
 import { LocalGame } from './localGame';
 import { P2PGuest } from './p2p/guest';
 import { P2PHost } from './p2p/host';
@@ -132,10 +132,10 @@ export interface StoreApi {
   startLocalGame: (nickname: string, gameId: GameId) => void;
   setGame: (gameId: GameId) => void;
   leaveRoom: () => void;
-  takeSeat: (seat: Seat) => void;
+  takeSeat: (seat: number) => void;
   leaveSeat: () => void;
-  addBot: (seat: Seat, name?: string) => void;
-  removeBot: (seat: Seat) => void;
+  addBot: (seat: number, name?: string) => void;
+  removeBot: (seat: number) => void;
   startGame: () => void;
   sendAction: (action: GameAction) => void;
   toLobby: () => void;
@@ -430,6 +430,12 @@ function describeEvent(event: GameEvent, nameOf: (seat: number) => string): stri
       return r.made
         ? `Round made \u2014 the shuffling side ${dir} kalyas`
         : `Round failed \u2014 the shuffling side ${dir} kalyas`;
+    }
+    case 'badamPassed':
+      return `${nameOf(event.seat)} passes`;
+    case 'badamRoundScored': {
+      const r = event.result;
+      return `🎉 ${nameOf(r.winner)} is out of cards and wins the round!`;
     }
     case 'matchOver':
       return null; // the overlay handles this

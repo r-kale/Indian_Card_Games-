@@ -1,6 +1,6 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import type { GameAction, GameEvent, GameView, RoomState, Seat } from '@icg/shared';
+import type { GameAction, GameEvent, GameView, RoomState } from '@icg/shared';
 import { HEARTBEAT_TIMEOUT_MS, peerIdForCode, peerOptions } from './protocol';
 import type { GuestToHost, HostToGuest } from './protocol';
 
@@ -97,7 +97,7 @@ export class P2PGuest {
     });
   }
 
-  takeSeat(seat: Seat): void {
+  takeSeat(seat: number): void {
     this.send({ t: 'takeSeat', seat });
   }
 

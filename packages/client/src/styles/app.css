@@ -868,3 +868,114 @@ input::placeholder {
     flex-wrap: wrap;
   }
 }
+
+/* ---- Badam 7 -------------------------------------------------------- */
+
+.table-screen.badam {
+  grid-template-areas:
+    'opps opps opps side'
+    'board board board side'
+    'bottom bottom bottom side';
+  grid-template-columns: 1fr 1fr 1fr 270px;
+  grid-template-rows: auto 1fr auto;
+}
+.badam-opponents {
+  grid-area: opps;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: flex-start;
+}
+.badam-board {
+  grid-area: board;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  padding: 8px 12px;
+  background: #00000022;
+  border-radius: 14px;
+}
+.suit-row-board {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+.suit-row-glyph {
+  font-size: 26px;
+  width: 32px;
+  text-align: center;
+  color: #cbd5e1;
+}
+.suit-row-glyph.red {
+  color: #f87171;
+}
+.suit-row-empty {
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+.suit-row-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.layout-chip {
+  background: #f8fafc;
+  color: #0f172a;
+  border-radius: 6px;
+  min-width: 26px;
+  padding: 4px 5px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 1px 2px #00000055;
+}
+.layout-chip.red {
+  color: #dc2626;
+}
+.layout-chip.seven {
+  outline: 2px solid #eab308;
+}
+.badam-badge {
+  min-width: 130px;
+}
+.badam-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+}
+.score-hint {
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 6px 2px 0;
+}
+
+/* Lobby seat grid for games with more than four seats. */
+.seat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 860px;
+}
+.seat-grid .seat-card {
+  position: static;
+  width: auto;
+  transform: none;
+}
+
+@media (max-width: 760px) {
+  .table-screen.badam {
+    grid-template-areas:
+      'side side'
+      'opps opps'
+      'board board'
+      'bottom bottom';
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto 1fr auto;
+  }
+}

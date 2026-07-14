@@ -7,7 +7,7 @@ function codeFromHash(): string {
 }
 
 export function Home() {
-  const { state, createRoom, joinRoom, startLocalGame } = useStore();
+  const { state, createRoom, joinRoom, hostP2PRoom, startLocalGame } = useStore();
   const [nickname, setNickname] = useState(loadNickname());
   const [code, setCode] = useState(codeFromHash());
   const ready = nickname.trim().length > 0;
@@ -37,20 +37,33 @@ export function Home() {
         </button>
 
         <div className="online-box">
-          <div className="online-title">
-            Play online with friends
-            {!online && <span className="tag warn">no game server reachable</span>}
-          </div>
-          {!online && (
-            <p className="online-hint">
-              Online rooms need the game server (<code>npm run dev</code> locally, or a hosted
-              server configured at build time). Solo play works everywhere.
-            </p>
-          )}
+          <div className="online-title">Play online with friends</div>
+          <p className="online-hint">
+            <strong>Host a room</strong> runs the game in your browser and connects friends
+            directly to you (peer-to-peer) — keep your tab open while playing.
+            {online
+              ? ' A game server is also available for server-hosted rooms.'
+              : ' No game server is reachable, so P2P is the way to play online here.'}
+          </p>
           <div className="online-actions">
-            <button disabled={!ready || !online} onClick={() => createRoom(nickname.trim())}>
-              Create a room
-            </button>
+            <div className="button-row">
+              <button
+                className="grow"
+                disabled={!ready}
+                onClick={() => hostP2PRoom(nickname.trim())}
+              >
+                Host a room (P2P)
+              </button>
+              {online && (
+                <button
+                  className="grow"
+                  disabled={!ready}
+                  onClick={() => createRoom(nickname.trim())}
+                >
+                  Create a server room
+                </button>
+              )}
+            </div>
             <div className="join-row">
               <input
                 value={code}
@@ -58,12 +71,12 @@ export function Home() {
                 maxLength={6}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && ready && online && code.length === 6)
+                  if (e.key === 'Enter' && ready && code.length === 6)
                     joinRoom(code, nickname.trim());
                 }}
               />
               <button
-                disabled={!ready || !online || code.length !== 6}
+                disabled={!ready || code.length !== 6}
                 onClick={() => joinRoom(code, nickname.trim())}
               >
                 Join

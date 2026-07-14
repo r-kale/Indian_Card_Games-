@@ -192,9 +192,13 @@ input::placeholder {
   flex-direction: column;
   gap: 8px;
 }
-.join-row {
+.join-row,
+.button-row {
   display: flex;
   gap: 8px;
+}
+.button-row .grow {
+  flex: 1;
 }
 .join-row input {
   flex: 1;
@@ -321,6 +325,12 @@ input::placeholder {
 }
 .spectators {
   opacity: 0.8;
+}
+.p2p-note {
+  background: #00000033;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 0.85rem;
 }
 
 /* ---------- Cards ---------- */

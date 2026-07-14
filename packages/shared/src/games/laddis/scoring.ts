@@ -1,12 +1,4 @@
-import {
-  KALYAS_PER_ARDHA,
-  KALYAS_PER_LADDOO,
-  NORMAL_LOSS,
-  NORMAL_WIN,
-  SIX_LOSS,
-  SIX_WIN,
-  teamOf,
-} from './types';
+import { NORMAL_LOSS, NORMAL_WIN, SIX_LOSS, SIX_WIN, teamOf } from './types';
 import type { LaddisState, RoundResult, Team } from './types';
 
 /**
@@ -60,17 +52,7 @@ export function scoreRound(s: LaddisState): RoundResult {
   };
 }
 
-/** "37 kalyas" -> "1 laddoo 5 kalyas", "16" -> "ardha laddoo", etc. */
+/** Scores read as plain numbers: "37 kalyas" stays "37 kalyas". */
 export function formatKalyas(kalyas: number): string {
-  if (kalyas === 0) return '0 kalyas';
-  const laddoos = Math.floor(kalyas / KALYAS_PER_LADDOO);
-  let rest = kalyas % KALYAS_PER_LADDOO;
-  const parts: string[] = [];
-  if (laddoos > 0) parts.push(`${laddoos} laddoo${laddoos > 1 ? 's' : ''}`);
-  if (rest >= KALYAS_PER_ARDHA) {
-    parts.push('ardha');
-    rest -= KALYAS_PER_ARDHA;
-  }
-  if (rest > 0) parts.push(`${rest} kalya${rest > 1 ? 's' : ''}`);
-  return parts.join(' + ');
+  return `${kalyas} kalya${kalyas === 1 ? '' : 's'}`;
 }

@@ -155,8 +155,7 @@ export function applyAction(state: LaddisState, action: LaddisAction): LaddisSta
     case 'nextRound':
       return applyNextRound(s);
     case 'endMatch':
-      if (s.phase !== 'roundOver') fail('the round is not over');
-      s.phase = 'matchOver';
+      applyEndMatch(s);
       break;
   }
   return s;
@@ -164,6 +163,20 @@ export function applyAction(state: LaddisState, action: LaddisAction): LaddisSta
 
 function fail(message: string): never {
   throw new LaddisError(message);
+}
+
+/**
+ * The host may stop the match at any point — typically once a side is
+ * hopelessly behind. The ledger stands as it is; an unfinished round is
+ * simply abandoned and the team in deficit loses.
+ */
+function applyEndMatch(s: LaddisState): void {
+  if (s.phase === 'matchOver') fail('the match is already over');
+  s.phase = 'matchOver';
+  s.turn = null;
+  s.window.turn = null;
+  s.mustPlayHukum = null;
+  if (s.hukum !== null) s.hukum.revealed = true; // showdown: everyone learns it
 }
 
 /**

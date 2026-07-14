@@ -166,6 +166,9 @@ export function LaddisTable() {
             </div>
           </div>
         )}
+        {isHost && mySeat !== null && view.phase !== 'matchOver' && (
+          <EndMatchButton seat={mySeat} onAction={sendAction} />
+        )}
         {isHost && (
           <button className="link" onClick={toLobby}>
             End game → lobby
@@ -209,6 +212,36 @@ export function LaddisTable() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Host control to stop the match at any point (e.g. when a side is clearly
+ * lost). Two taps so a stray click can't end everyone's game.
+ */
+function EndMatchButton({
+  seat,
+  onAction,
+}: {
+  seat: Seat;
+  onAction: (a: LaddisAction) => void;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return undefined;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      className="link"
+      onClick={() => {
+        if (armed) onAction({ type: 'endMatch', seat });
+        else setArmed(true);
+      }}
+    >
+      {armed ? 'Tap again to end the match' : 'End match — settle the score'}
+    </button>
   );
 }
 
@@ -478,6 +511,12 @@ function RoundOverDialog({
             ? `roles swap! ${teamNames(r.shufflingTeamAfter)} now shuffle at ${formatKalyas(r.deficitAfter)}`
             : `${teamNames(r.shufflingTeamAfter)} still down ${formatKalyas(r.deficitAfter)}`}
         </p>
+        {r.deficitAfter >= 32 && (
+          <p className="center-note">
+            {teamNames(r.shufflingTeamAfter)} are {r.deficitAfter} kalyas down — the host can
+            end the match here.
+          </p>
+        )}
         <div className="dialog-actions">
           {mySeat !== null && (
             <button className="primary" onClick={() => onAction({ type: 'nextRound', seat: mySeat })}>

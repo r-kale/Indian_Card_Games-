@@ -87,11 +87,11 @@ describe('declaring', () => {
     expect(s.turn).toBe(1); // the bid winner leads the first trick
     expect(s.trickLeader).toBe(1);
     expect(s.trumpSuit).toBe('H');
-    expect(s.partner).toMatchObject({ card: partnerCard, seat: 3, revealed: false });
+    expect(s.partner).toMatchObject({ card: partnerCard, seat: 3, status: 'hidden' });
     // Everyone sees the card; only the holder knows the seat.
-    expect(redactFor(s, 0).partner).toEqual({ card: partnerCard, revealed: false, seat: null });
-    expect(redactFor(s, 1).partner).toEqual({ card: partnerCard, revealed: false, seat: null });
-    expect(redactFor(s, 3).partner).toEqual({ card: partnerCard, revealed: false, seat: 3 });
+    expect(redactFor(s, 0).partner).toEqual({ card: partnerCard, status: 'hidden', seat: null });
+    expect(redactFor(s, 1).partner).toEqual({ card: partnerCard, status: 'hidden', seat: null });
+    expect(redactFor(s, 3).partner).toEqual({ card: partnerCard, status: 'hidden', seat: 3 });
   });
 });
 
@@ -112,7 +112,7 @@ function endgame(): Game304State {
     bidding: { ...base.bidding, highBid: 200, highBidder: 1, passed: [true, false, true, true] },
     bid: { amount: 200, bidder: 1 },
     trumpSuit: 'H',
-    partner: { card: c('9', 'S'), seat: 3, revealed: false },
+    partner: { card: c('9', 'S'), seat: 3, status: 'hidden' },
     turn: 1,
     trickLeader: 1,
     trick: [],
@@ -154,8 +154,42 @@ describe('playing', () => {
     const plays = legalActions(s2, 3 as Seat);
     expect(plays).toEqual([{ type: 'playCard', seat: 3, card: c('9', 'S') }]);
     const s3 = applyAction(s2, { type: 'playCard', seat: 3, card: c('9', 'S') });
-    expect(s3.partner!.revealed).toBe(true);
+    // Card on the table: everyone now knows the holder, but the alliance is
+    // only decided when the trick ends.
+    expect(s3.partner!.status).toBe('played');
     expect(redactFor(s3, 0).partner!.seat).toBe(3);
+    const s4 = applyAction(s3, { type: 'playCard', seat: 0, card: c('A', 'S') });
+    expect(s4.lastTrickWinner).toBe(1); // bidder's J♠ held the trick
+    expect(s4.partner!.status).toBe('allied');
+  });
+
+  it('loses the partner when an opponent captures the partner-card trick', () => {
+    let s = endgame();
+    // Seat 2 is void in spades and holds trump: they will steal the trick.
+    s.hands = [
+      [c('A', 'S'), c('8', 'D')],
+      [c('J', 'S'), c('7', 'S')],
+      [c('8', 'H'), c('7', 'D')],
+      [c('9', 'S'), c('7', 'H')],
+    ];
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('8', 'H') }); // trumps in
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('9', 'S') }); // forced partner card
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
+    expect(s.lastTrickWinner).toBe(2); // trump captured the partner-card trick
+    expect(s.partner!.status).toBe('lone');
+    // Play out the last trick and score: the bidder is alone on 90 < 200.
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('7', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('7', 'H') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
+    expect(s.phase).toBe('dealOver');
+    expect(s.dealResult).toMatchObject({
+      alliance: 'lone',
+      bidTeamPoints: 90,
+      madeIt: false,
+      deltas: [1, 0, 1, 1], // ex-partner counts among the three winners
+    });
   });
 
   it('does not force the partner card when someone other than the bidder leads', () => {
@@ -171,7 +205,10 @@ describe('playing', () => {
     // partner-card restriction is not what forced it.
     expect(plays).toEqual([{ type: 'playCard', seat: 3, card: c('9', 'S') }]);
     const done = applyAction(s, { type: 'playCard', seat: 3, card: c('9', 'S') });
-    expect(done.partner!.revealed).toBe(true); // playing the card always reveals
+    // The 9♠ itself won the trick (9 outranks A): the partner card winning
+    // counts as the bidder's side, so the alliance forms.
+    expect(done.lastTrickWinner).toBe(3);
+    expect(done.partner!.status).toBe('allied');
   });
 
   it('scores the deal per player: bidder + partner vs the rest', () => {
@@ -192,6 +229,7 @@ describe('playing', () => {
     expect(s.dealResult).toMatchObject({
       bidder: 1,
       partnerSeat: 3,
+      alliance: 'allied',
       bidTeamPoints: 204,
       madeIt: true,
       deltas: [0, 1, 0, 1],
@@ -201,13 +239,48 @@ describe('playing', () => {
 });
 
 describe('scoring helpers', () => {
-  it('awards +1 to each winner', () => {
-    const made = scoreDeal([50, 150, 40, 64], { amount: 200, bidder: 1 }, 3, c('9', 'S'), 'H');
+  it('awards +1 to each winner when allied', () => {
+    const made = scoreDeal(
+      [50, 150, 40, 64],
+      { amount: 200, bidder: 1 },
+      3,
+      c('9', 'S'),
+      'H',
+      'allied',
+    );
     expect(made.madeIt).toBe(true);
     expect(made.deltas).toEqual([0, 1, 0, 1]);
-    const failed = scoreDeal([100, 80, 60, 64], { amount: 200, bidder: 1 }, 3, c('9', 'S'), 'H');
+    const failed = scoreDeal(
+      [100, 80, 60, 64],
+      { amount: 200, bidder: 1 },
+      3,
+      c('9', 'S'),
+      'H',
+      'allied',
+    );
     expect(failed.madeIt).toBe(false);
     expect(failed.deltas).toEqual([1, 0, 1, 0]);
+  });
+
+  it('pays a lone bidder +2, or +1 to each of the other three', () => {
+    const made = scoreDeal(
+      [40, 210, 30, 24],
+      { amount: 200, bidder: 1 },
+      3,
+      c('9', 'S'),
+      'H',
+      'lone',
+    );
+    expect(made).toMatchObject({ bidTeamPoints: 210, madeIt: true, deltas: [0, 2, 0, 0] });
+    const failed = scoreDeal(
+      [40, 190, 50, 24],
+      { amount: 200, bidder: 1 },
+      3,
+      c('9', 'S'),
+      'H',
+      'lone',
+    );
+    expect(failed).toMatchObject({ bidTeamPoints: 190, madeIt: false, deltas: [1, 0, 1, 1] });
   });
 
   it('detects match winners at 5 points', () => {

@@ -31,7 +31,10 @@ describe('bot simulation', () => {
           expect(state.tricksTaken.reduce((a, b) => a + b, 0)).toBe(8);
           const result = state.dealResult!;
           expect(result.partnerSeat).not.toBe(result.bidder);
-          expect(state.partner!.revealed).toBe(true);
+          expect(['allied', 'lone']).toContain(state.partner!.status);
+          // Deltas always match the alliance outcome.
+          const deltaSum = result.deltas.reduce((a, b) => a + b, 0);
+          expect(deltaSum).toBe(result.alliance === 'lone' ? (result.madeIt ? 2 : 3) : 2);
           totalDeals++;
           state = applyAction(state, { type: 'nextDeal', seat: 0 });
           continue;
@@ -40,7 +43,11 @@ describe('bot simulation', () => {
         // Redaction invariants: a seat sees only its own cards, and the
         // hidden partner's seat leaks to nobody but the partner themself.
         expect(view.hand.length).toBe(state.hands[seat].length);
-        if (state.partner !== null && !state.partner.revealed && seat !== state.partner.seat) {
+        if (
+          state.partner !== null &&
+          state.partner.status === 'hidden' &&
+          seat !== state.partner.seat
+        ) {
           expect(view.partner!.seat).toBeNull();
         }
         const action = chooseAction(view, rng);

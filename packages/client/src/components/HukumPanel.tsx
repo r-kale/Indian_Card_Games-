@@ -22,11 +22,15 @@ export function HukumPanel({ view, room }: { view: Player304View; room: RoomStat
           <span className="hukum-label">Partner card</span>
           <CardFace card={partner.card} size="small" />
           <span className="partner-status">
-            {partner.revealed
-              ? (room.seats[partner.seat!]?.nickname ?? `Seat ${partner.seat}`)
-              : partner.seat === view.seat
-                ? "you! (don't tell)"
-                : 'hidden 🎭'}
+            {partner.status === 'allied'
+              ? `${room.seats[partner.seat!]?.nickname ?? `Seat ${partner.seat}`} ✓`
+              : partner.status === 'lone'
+                ? 'lost — bidder alone!'
+                : partner.status === 'played'
+                  ? 'on the table…'
+                  : partner.seat === view.seat
+                    ? "you! (don't tell)"
+                    : 'hidden 🎭'}
           </span>
         </div>
       )}

@@ -24,15 +24,25 @@ export interface BiddingState {
 }
 
 /**
+ * hidden  – partner card not yet played; identity secret.
+ * played  – card is on the table this trick; alliance decided when it ends.
+ * allied  – the bidder's side (bidder or the partner card) won that trick:
+ *           the holder joins the bidder.
+ * lone    – one of the other two captured that trick: the bidder plays
+ *           alone against three.
+ */
+export type PartnerStatus = 'hidden' | 'played' | 'allied' | 'lone';
+
+/**
  * The bid winner openly declares the hukum (trump suit) and a partner card
- * they do not hold. Whoever holds that card is their secret partner for the
- * deal; the identity stays hidden until the card is played.
+ * they do not hold. Whoever holds that card only becomes the bidder's
+ * partner if their side wins the trick in which the card is played.
  */
 export interface PartnerState {
   card: Card;
-  /** Known to the engine from the start; redacted from views until revealed. */
+  /** Known to the engine from the start; redacted from views while hidden. */
   seat: Seat;
-  revealed: boolean;
+  status: PartnerStatus;
 }
 
 export interface DealResult {
@@ -41,10 +51,12 @@ export interface DealResult {
   partnerSeat: Seat;
   partnerCard: Card;
   trumpSuit: Suit;
-  /** Points captured by bidder + partner together. */
+  /** 'lone' when the bidder lost the partner-card trick and played alone. */
+  alliance: 'allied' | 'lone';
+  /** Points captured by the bidder's side (bidder + partner, or bidder alone). */
   bidTeamPoints: number;
   madeIt: boolean;
-  /** Match points awarded this deal, per seat (+1 to each winner). */
+  /** Match points per seat: +1 each on the winning side; a lone bidder wins +2. */
   deltas: [number, number, number, number];
 }
 
@@ -89,9 +101,9 @@ export interface Player304View {
   bidding: BiddingState;
   bid: { amount: number; bidder: Seat } | null;
   trumpSuit: Suit | null;
-  /** Partner card is public; the holder's seat is hidden until revealed
-   *  (the holder themself always knows). */
-  partner: { card: Card; revealed: boolean; seat: Seat | null } | null;
+  /** Partner card is public; the holder's seat is hidden until the card is
+   *  played (the holder themself always knows). */
+  partner: { card: Card; status: PartnerStatus; seat: Seat | null } | null;
   turn: Seat | null;
   trick: TrickPlay[];
   trickLeader: Seat;

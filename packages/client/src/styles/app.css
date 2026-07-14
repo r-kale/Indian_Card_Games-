@@ -368,6 +368,17 @@ input::placeholder {
   font-size: 1.3rem;
   line-height: 1;
 }
+.card .card-pts {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  opacity: 0.55;
+}
+.card {
+  position: relative;
+}
 .card.clickable:hover {
   transform: translateY(-10px);
   box-shadow: 0 8px 14px #00000066;

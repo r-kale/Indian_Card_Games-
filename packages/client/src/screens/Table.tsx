@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MATCH_TARGET, matchWinners } from '@icg/shared';
+import { cardPoints, MATCH_TARGET, matchWinners } from '@icg/shared';
 import type { Seat, TrickPlay } from '@icg/shared';
 import { BidDialog } from '../components/BidDialog';
 import { DeclareDialog } from '../components/DeclareDialog';
@@ -68,7 +68,10 @@ export function Table() {
           winner={showLinger ? linger.winner : null}
         />
         {showLinger && (
-          <div className="trick-note">{nameOf(linger.winner)} takes the trick</div>
+          <div className="trick-note">
+            {nameOf(linger.winner)} takes the trick (+
+            {linger.trick.reduce((s, p) => s + cardPoints(p.card), 0)} pts)
+          </div>
         )}
       </div>
       <div className="table-right">
@@ -102,7 +105,10 @@ export function Table() {
         <ScorePanel view={view} room={room} />
         {view.lastTrick !== null && view.lastTrickWinner !== null && (
           <div className="last-trick">
-            <div className="hukum-label">Last trick — {nameOf(view.lastTrickWinner)}</div>
+            <div className="hukum-label">
+              Last trick — {nameOf(view.lastTrickWinner)} (+
+              {view.lastTrick.reduce((s, p) => s + cardPoints(p.card), 0)} pts)
+            </div>
             <div className="last-trick-cards">
               {view.lastTrick.map((p, i) => (
                 <div key={p.seat} className="last-trick-card" title={nameOf(p.seat as Seat)}>

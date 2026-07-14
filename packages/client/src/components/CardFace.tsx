@@ -1,3 +1,4 @@
+import { cardPoints } from '@icg/shared';
 import type { Card } from '@icg/shared';
 
 const SUIT_GLYPH = { S: '♠', H: '♥', D: '♦', C: '♣' } as const;
@@ -26,10 +27,12 @@ export function CardFace({
   ]
     .filter(Boolean)
     .join(' ');
+  const pts = cardPoints(card);
   return (
     <button className={classes} onClick={onClick} disabled={disabled || onClick === undefined}>
       <span className="card-rank">{card.rank}</span>
       <span className="card-suit">{SUIT_GLYPH[card.suit]}</span>
+      {pts > 0 && <span className="card-pts">{pts}</span>}
     </button>
   );
 }

@@ -16,7 +16,7 @@ export function SeatBadge({
   const name = entry?.nickname ?? `Seat ${seat}`;
   const isDealer = view.dealer === seat;
   const isBidder = view.bid?.bidder === seat;
-  const isPartner = view.partner?.revealed === true && view.partner.seat === seat;
+  const isPartner = view.partner?.status === 'allied' && view.partner.seat === seat;
   const passed = view.phase === 'bidding' && view.bidding.passed[seat];
   const offline = entry?.kind === 'human' && !entry.connected;
 

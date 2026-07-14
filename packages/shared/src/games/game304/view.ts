@@ -10,10 +10,12 @@ import type { Game304State, Player304View, Seat } from './types';
 export function redactFor(state: Game304State, seat: Seat | null): Player304View {
   let partner: Player304View['partner'] = null;
   if (state.partner !== null) {
-    const knowsSeat = state.partner.revealed || state.partner.seat === seat;
+    // Once the card is played (or the alliance decided) everyone knows the
+    // holder; before that only the holder themself does.
+    const knowsSeat = state.partner.status !== 'hidden' || state.partner.seat === seat;
     partner = {
       card: state.partner.card,
-      revealed: state.partner.revealed,
+      status: state.partner.status,
       seat: knowsSeat ? state.partner.seat : null,
     };
   }

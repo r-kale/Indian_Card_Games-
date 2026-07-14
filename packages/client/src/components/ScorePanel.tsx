@@ -4,7 +4,7 @@ import type { Player304View, RoomState, Seat } from '@icg/shared';
 /** Per-player scores: partnerships change every deal, so everyone has their own tally. */
 export function ScorePanel({ view, room }: { view: Player304View; room: RoomState }) {
   const name = (seat: Seat) => room.seats[seat]?.nickname ?? `Seat ${seat}`;
-  const bidTeamKnown = view.partner !== null && view.partner.revealed;
+  const bidTeamKnown = view.partner !== null && view.partner.status === 'allied';
   return (
     <div className="score-panel">
       <div className="score-row header">

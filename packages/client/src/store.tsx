@@ -402,7 +402,9 @@ const SUIT_GLYPHS = { S: '♠', H: '♥', D: '♦', C: '♣' } as const;
 function describeEvent(event: GameEvent, nameOf: (seat: number) => string): string | null {
   switch (event.type) {
     case 'partnerRevealed':
-      return `🎭 ${nameOf(event.seat)} is the partner! (${event.card.rank}${SUIT_GLYPHS[event.card.suit]})`;
+      return event.alliance === 'allied'
+        ? `🎭 ${nameOf(event.seat)} is the partner! (${event.card.rank}${SUIT_GLYPHS[event.card.suit]})`
+        : `💥 Partner trick lost — the bidder now plays alone vs 3!`;
     case 'dealScored': {
       const r = event.result;
       return r.madeIt

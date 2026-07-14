@@ -139,9 +139,11 @@ export function Table() {
             <p>
               {nameOf(view.dealResult.bidder)} bid {view.dealResult.bid} and{' '}
               {view.dealResult.madeIt ? 'took' : 'only took'} {view.dealResult.bidTeamPoints} of
-              304 with partner {nameOf(view.dealResult.partnerSeat)} (
-              {view.dealResult.partnerCard.rank}
-              {{ S: '♠', H: '♥', D: '♦', C: '♣' }[view.dealResult.partnerCard.suit]}).
+              304{' '}
+              {view.dealResult.alliance === 'allied'
+                ? `with partner ${nameOf(view.dealResult.partnerSeat)} (${view.dealResult.partnerCard.rank}${{ S: '♠', H: '♥', D: '♦', C: '♣' }[view.dealResult.partnerCard.suit]})`
+                : `playing alone — the partner trick was lost${view.dealResult.madeIt ? ', +2!' : ''}`}
+              .
             </p>
             <p className="match-line">
               {([0, 1, 2, 3] as Seat[])

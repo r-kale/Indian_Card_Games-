@@ -80,22 +80,34 @@ function chooseDeclaration(view: Player304View): Action304 {
   return { type: 'declare', seat: view.seat as Seat, trumpSuit, partnerCard };
 }
 
-/** Seats this bot KNOWS are on its side (partnerships are secret until revealed). */
+/** Seats this bot KNOWS are on its side (partnerships are secret until the
+ *  partner-card trick resolves; a 'lone' outcome throws the holder in with
+ *  the defenders). */
 function knownAllies(view: Player304View): Set<number> {
   const allies = new Set<number>();
   if (view.seat === null || view.bid === null || view.partner === null) return allies;
   const me = view.seat;
   const bidder = view.bid.bidder;
-  const partnerSeat = view.partner.seat; // null unless revealed or we ARE the partner
+  const { seat: partnerSeat, status } = view.partner;
   if (me === bidder) {
-    if (partnerSeat !== null) allies.add(partnerSeat);
-  } else if (partnerSeat === me) {
-    allies.add(bidder);
-  } else if (partnerSeat !== null) {
-    // Partner is known and it isn't us: we're a defender; the other defender
-    // is whoever is neither bidder nor partner nor us.
+    if (status === 'allied' && partnerSeat !== null) allies.add(partnerSeat);
+    return allies; // lone or undecided: trust nobody
+  }
+  if (partnerSeat === me) {
+    // We hold (or held) the partner card.
+    if (status === 'lone') {
+      for (let s = 0; s < 4; s++) if (s !== me && s !== bidder) allies.add(s);
+    } else {
+      allies.add(bidder); // hidden/played/allied: we expect to side with the bidder
+    }
+    return allies;
+  }
+  // We're a defender: everyone but the bidder (and an allied partner) is with us.
+  if (status === 'allied' || status === 'lone') {
     for (let s = 0; s < 4; s++) {
-      if (s !== me && s !== bidder && s !== partnerSeat) allies.add(s);
+      if (s === me || s === bidder) continue;
+      if (status === 'allied' && s === partnerSeat) continue;
+      allies.add(s);
     }
   }
   return allies;
@@ -110,15 +122,26 @@ function choosePlay(view: Player304View, actions: readonly Action304[], rng: Rng
 
   // Leading a trick.
   if (view.trick.length === 0) {
-    // The bidder can out their hidden partner by leading the partner suit.
+    // The bidder can out their hidden partner by leading the partner suit —
+    // but the alliance only forms if the bidder or the partner card takes
+    // that trick, so only try it with a card that outranks the partner card
+    // (either our lead or their forced card should then hold the trick).
     if (
       view.seat === view.bid?.bidder &&
       view.partner !== null &&
-      !view.partner.revealed &&
+      view.partner.status === 'hidden' &&
       rng() < 0.5
     ) {
-      const outing = plays.filter((a) => a.card.suit === view.partner!.card.suit);
-      if (outing.length > 0) return strongest(outing);
+      const partnerCard = view.partner.card;
+      const inSuit = plays.filter((a) => a.card.suit === partnerCard.suit);
+      if (partnerCard.rank === 'J' && inSuit.length > 0) {
+        // The partner's forced J should hold the trick: lead the suit cheaply.
+        return cheapest(inSuit);
+      }
+      const stronger = inSuit.filter(
+        (a) => rankIndex(a.card.rank, RANK_ORDER_304) < rankIndex(partnerCard.rank, RANK_ORDER_304),
+      );
+      if (stronger.length > 0) return strongest(stronger);
     }
     return strongest(plays);
   }

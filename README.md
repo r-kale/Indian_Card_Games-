@@ -61,12 +61,17 @@ npx tsx packages/shared/scripts/sim.ts [seed]   # print a bot-vs-bot deal turn b
 - Bidding: the player right of the dealer must open at 160+; raises go in steps of 10
   (304 is the top bid); pass and you're out.
 - The bid winner **openly declares the hukum (trump suit)** and names a **partner card**
-  they don't hold. Whoever holds that card is secretly the bidder's partner for the deal.
-- The partnership stays hidden until the partner card is played. The bidder can force the
-  reveal by **leading the partner-card suit** — the holder must then play it.
+  they don't hold, then leads the first trick. Whoever holds that card is secretly the
+  bidder's prospective partner.
+- The partnership stays hidden until the partner card is played. The bidder can force it
+  out by **leading the partner-card suit** — the holder must then play it.
+- **The alliance test:** the partnership only forms if the bidder — or the partner card
+  itself — wins the trick the card is played in. If one of the other two captures that
+  trick, the bidder plays **alone against three**.
 - Follow suit if you can; trump can only be played (and only wins) from a void hand.
-- The bidder + partner must capture at least the bid in points. Each player on the winning
-  side scores +1; partnerships reshuffle every deal, and the first player to 5 wins the match.
+- The bidder's side must capture at least the bid in points. Each player on the winning
+  side scores +1 (a lone bidder who makes it scores +2); partnerships reshuffle every
+  deal, and the first player to 5 wins the match.
 
 ## Architecture
 

@@ -8,7 +8,7 @@ export type AckFn<T = Record<never, never>> = (result: Ack<T>) => void;
 /** Ephemeral cues for animations and toasts; state lives in game:view. */
 export type GameEvent =
   | { type: 'trickWon'; seat: Seat; points: number }
-  | { type: 'partnerRevealed'; seat: Seat; card: Card }
+  | { type: 'partnerRevealed'; seat: Seat; card: Card; alliance: 'allied' | 'lone' }
   | { type: 'dealScored'; result: DealResult }
   | { type: 'matchOver'; winners: Seat[] };
 

@@ -122,7 +122,7 @@ function legalPlays(state: Game304State, seat: Seat): Card[] {
   const follows = legalFollows(state.hands[seat], state.trick);
   const partner = state.partner!;
   if (
-    !partner.revealed &&
+    partner.status === 'hidden' &&
     partner.seat === seat &&
     state.trick.length > 0 &&
     state.trickLeader === state.bid!.bidder &&
@@ -214,7 +214,7 @@ function applyDeclare(s: Game304State, seat: Seat, trumpSuit: Suit, partnerCard:
   }
   if (partnerSeat === null) fail('no such card in play');
   s.trumpSuit = trumpSuit;
-  s.partner = { card: partnerCard, seat: partnerSeat, revealed: false };
+  s.partner = { card: partnerCard, seat: partnerSeat, status: 'hidden' };
   s.phase = 'playing';
   // The bid winner leads the first trick.
   s.turn = seat;
@@ -233,8 +233,8 @@ function applyPlayCard(s: Game304State, seat: Seat, card: Card): void {
 
   hand.splice(idx, 1);
   s.trick.push({ seat, card });
-  if (s.partner !== null && !s.partner.revealed && cardsEqual(card, s.partner.card)) {
-    s.partner.revealed = true;
+  if (s.partner !== null && s.partner.status === 'hidden' && cardsEqual(card, s.partner.card)) {
+    s.partner.status = 'played';
   }
 
   if (s.trick.length === 4) {
@@ -242,6 +242,12 @@ function applyPlayCard(s: Game304State, seat: Seat, card: Card): void {
     const points = s.trick.reduce((sum, p) => sum + cardPoints(p.card), 0);
     s.capturedPoints[winner] += points;
     s.tricksTaken[winner] += 1;
+    // The alliance test: the holder only joins the bidder if the bidder's
+    // side (the bidder, or the partner card itself) takes this trick.
+    if (s.partner !== null && s.partner.status === 'played') {
+      s.partner.status =
+        winner === s.bid!.bidder || winner === s.partner.seat ? 'allied' : 'lone';
+    }
     s.lastTrick = s.trick;
     s.lastTrickWinner = winner;
     s.trick = [];
@@ -258,8 +264,17 @@ function applyPlayCard(s: Game304State, seat: Seat, card: Card): void {
 
 function finishDeal(s: Game304State): void {
   const partner = s.partner!;
-  partner.revealed = true; // everyone learns the partnership at the showdown
-  s.dealResult = scoreDeal(s.capturedPoints, s.bid!, partner.seat, partner.card, s.trumpSuit!);
+  // Every card has been played by now, so the alliance is always decided.
+  const alliance = partner.status === 'lone' ? 'lone' : 'allied';
+  partner.status = alliance;
+  s.dealResult = scoreDeal(
+    s.capturedPoints,
+    s.bid!,
+    partner.seat,
+    partner.card,
+    s.trumpSuit!,
+    alliance,
+  );
   s.matchScore = s.matchScore.map((v, i) => v + s.dealResult!.deltas[i]!) as Game304State['matchScore'];
   s.phase = 'dealOver';
   s.turn = null;

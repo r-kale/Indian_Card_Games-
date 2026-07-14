@@ -40,8 +40,14 @@ while (state.phase !== 'dealOver' && state.phase !== 'matchOver') {
       break;
     case 'playCard': {
       console.log(`seat ${seat} plays ${cardKey(action.card)}`);
-      if (before.partner?.revealed === false && state.partner?.revealed === true) {
-        console.log(`  !! partner revealed: seat ${state.partner.seat}`);
+      const beforeStatus = before.partner?.status;
+      const afterStatus = state.partner?.status;
+      if (beforeStatus !== afterStatus && (afterStatus === 'allied' || afterStatus === 'lone')) {
+        console.log(
+          afterStatus === 'allied'
+            ? `  !! partner allied: seat ${state.partner!.seat}`
+            : `  !! partner trick lost: seat ${state.bid!.bidder} plays alone vs 3`,
+        );
       }
       if (state.trick.length === 0 && state.lastTrick !== null) {
         const pts = state.lastTrick.reduce((s, p) => s + cardPoints(p.card), 0);
@@ -58,8 +64,12 @@ while (state.phase !== 'dealOver' && state.phase !== 'matchOver') {
 
 if (state.dealResult !== null) {
   const r = state.dealResult;
+  const side =
+    r.alliance === 'allied'
+      ? `with partner seat ${r.partnerSeat} (${cardKey(r.partnerCard)})`
+      : `ALONE (partner trick lost)`;
   console.log(
-    `=== deal over: seat ${r.bidder} bid ${r.bid} with partner seat ${r.partnerSeat} (${cardKey(r.partnerCard)});` +
+    `=== deal over: seat ${r.bidder} bid ${r.bid} ${side};` +
       ` they took ${r.bidTeamPoints} -> ${r.madeIt ? 'MADE IT' : 'FAILED'};` +
       ` match score ${state.matchScore.join(' / ')} ===`,
   );

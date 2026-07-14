@@ -21,11 +21,17 @@ export function deriveEvents(prev: Game304State, next: Game304State): GameEvent[
   }
   if (
     prev.partner !== null &&
-    !prev.partner.revealed &&
-    next.partner?.revealed === true &&
-    next.phase === 'playing' // showdown reveal at deal end is covered by dealScored
+    next.partner !== null &&
+    (prev.partner.status === 'hidden' || prev.partner.status === 'played') &&
+    (next.partner.status === 'allied' || next.partner.status === 'lone') &&
+    next.phase === 'playing' // deal-end resolution is covered by dealScored
   ) {
-    events.push({ type: 'partnerRevealed', seat: next.partner.seat, card: next.partner.card });
+    events.push({
+      type: 'partnerRevealed',
+      seat: next.partner.seat,
+      card: next.partner.card,
+      alliance: next.partner.status,
+    });
   }
   if (prev.dealResult === null && next.dealResult !== null) {
     events.push({ type: 'dealScored', result: next.dealResult });

@@ -12,13 +12,14 @@ const SEAT_LAYOUT: { seat: Seat; area: string }[] = [
 export function Lobby() {
   const { state, takeSeat, leaveSeat, addBot, removeBot, startGame, leaveRoom } = useStore();
   const [copied, setCopied] = useState(false);
+  const [botNames, setBotNames] = useState<Record<number, string>>({});
   const room = state.roomState!;
   const me = state.session!.playerId;
   const isHost = room.hostId === me;
   const mySeat = room.seats.findIndex((s) => s?.playerId === me);
 
   const copyCode = () => {
-    const url = `${window.location.origin}/#/${room.code}`;
+    const url = `${window.location.origin}${window.location.pathname}#/${room.code}`;
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
@@ -38,8 +39,8 @@ export function Lobby() {
       </div>
 
       <p className="subtitle">
-        Teams sit across from each other: <span className="team-a">seats 0 &amp; 2</span> vs{' '}
-        <span className="team-b">seats 1 &amp; 3</span>. Empty seats get bots when the host starts.
+        Partnerships change every deal: the bid winner declares a partner card, and whoever holds
+        it is secretly on their team. Empty seats get bots when the host starts.
       </p>
       {state.mode === 'p2pHost' && (
         <p className="subtitle p2p-note">
@@ -54,17 +55,26 @@ export function Lobby() {
         <div className="diamond-center">304</div>
         {SEAT_LAYOUT.map(({ seat, area }) => {
           const entry = room.seats[seat];
-          const team = seat % 2 === 0 ? 'team-a' : 'team-b';
           return (
-            <div key={seat} className={`seat-card ${area} ${team}`}>
+            <div key={seat} className={`seat-card ${area}`}>
               <div className="seat-label">Seat {seat}</div>
               {entry === null ? (
                 <>
-                  <div className="seat-empty">empty</div>
                   <div className="seat-buttons">
                     <button onClick={() => takeSeat(seat)}>Sit here</button>
-                    {isHost && <button onClick={() => addBot(seat)}>Add bot</button>}
                   </div>
+                  {isHost && (
+                    <div className="bot-add-row">
+                      <input
+                        className="bot-name-input"
+                        placeholder="Bot name"
+                        maxLength={20}
+                        value={botNames[seat] ?? ''}
+                        onChange={(e) => setBotNames({ ...botNames, [seat]: e.target.value })}
+                      />
+                      <button onClick={() => addBot(seat, botNames[seat])}>Add bot</button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -88,9 +98,7 @@ export function Lobby() {
       </div>
 
       {room.spectators.length > 0 && (
-        <p className="spectators">
-          Watching: {room.spectators.map((s) => s.nickname).join(', ')}
-        </p>
+        <p className="spectators">Watching: {room.spectators.map((s) => s.nickname).join(', ')}</p>
       )}
 
       {isHost ? (

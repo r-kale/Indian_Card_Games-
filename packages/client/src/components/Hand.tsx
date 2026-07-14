@@ -15,7 +15,7 @@ export function Hand({
 }) {
   const playable = new Set(
     view.legalActions
-      .filter((a) => a.type === 'playCard' || a.type === 'selectTrump')
+      .filter((a) => a.type === 'playCard')
       .map((a) => cardKey((a as { card: Card }).card)),
   );
   const anyPlayable = playable.size > 0;

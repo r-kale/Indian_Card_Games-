@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardsEqual } from '../../core/cards';
 import { makeRng } from '../../core/rng';
 import { chooseAction } from './bot';
 import { actingSeat, applyAction, initDeal, legalActions } from './engine';
@@ -10,41 +11,48 @@ import type { Game304State } from './types';
  * This fuzzes every phase transition and is the regression net for refactors.
  */
 describe('bot simulation', () => {
-  it('plays 40 full matches (200+ deals) without an illegal action', () => {
+  it('plays 40 full matches without an illegal action', () => {
     let totalDeals = 0;
     for (let match = 0; match < 40; match++) {
       const rng = makeRng(`bots-${match}`);
       let state: Game304State = initDeal({
-        matchScore: [0, 0],
+        matchScore: [0, 0, 0, 0],
         dealer: 0,
         seed: `match-${match}`,
         dealNumber: 1,
       });
       let steps = 0;
       while (state.phase !== 'matchOver') {
-        if (++steps > 5000) throw new Error('simulation did not terminate');
+        if (++steps > 10000) throw new Error('simulation did not terminate');
         const seat = actingSeat(state);
         if (seat === null) {
           // dealOver: check the invariants of a finished deal, then move on.
-          expect(state.capturedPoints[0] + state.capturedPoints[1]).toBe(304);
-          expect(state.tricksTaken[0] + state.tricksTaken[1]).toBe(8);
-          expect(state.dealResult).not.toBeNull();
+          expect(state.capturedPoints.reduce((a, b) => a + b, 0)).toBe(304);
+          expect(state.tricksTaken.reduce((a, b) => a + b, 0)).toBe(8);
+          const result = state.dealResult!;
+          expect(result.partnerSeat).not.toBe(result.bidder);
+          expect(state.partner!.revealed).toBe(true);
           totalDeals++;
           state = applyAction(state, { type: 'nextDeal', seat: 0 });
           continue;
         }
         const view = redactFor(state, seat);
-        // Redaction invariants: a seat sees only its own cards.
+        // Redaction invariants: a seat sees only its own cards, and the
+        // hidden partner's seat leaks to nobody but the partner themself.
         expect(view.hand.length).toBe(state.hands[seat].length);
-        if (state.trump !== null && !state.trump.revealed && state.bid!.bidder !== seat) {
-          expect(view.trump).toEqual({ revealed: false, suit: null, card: null });
+        if (state.partner !== null && !state.partner.revealed && seat !== state.partner.seat) {
+          expect(view.partner!.seat).toBeNull();
         }
         const action = chooseAction(view, rng);
-        const legal = legalActions(state, seat);
-        expect(legal).toContainEqual(action);
+        if (action.type === 'declare') {
+          // Declarations are validated by applyAction, not enumerated.
+          expect(state.hands[seat].some((c) => cardsEqual(c, action.partnerCard))).toBe(false);
+        } else {
+          expect(legalActions(state, seat)).toContainEqual(action);
+        }
         state = applyAction(state, action);
       }
-      expect(Math.max(state.matchScore[0], state.matchScore[1])).toBeGreaterThanOrEqual(6);
+      expect(Math.max(...state.matchScore)).toBeGreaterThanOrEqual(5);
     }
     expect(totalDeals).toBeGreaterThanOrEqual(150);
   });

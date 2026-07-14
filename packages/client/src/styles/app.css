@@ -240,14 +240,6 @@ input::placeholder {
   background: #00000044;
   padding: 8px 16px;
 }
-.team-a {
-  color: #93c5fd;
-  font-weight: 700;
-}
-.team-b {
-  color: #fcd34d;
-  font-weight: 700;
-}
 
 .seat-diamond {
   position: relative;
@@ -266,22 +258,30 @@ input::placeholder {
 }
 .seat-card {
   position: absolute;
-  width: 180px;
+  width: 190px;
   min-height: 92px;
   background: #00000044;
   border-radius: 12px;
-  border-top: 4px solid;
+  border-top: 4px solid #eab30888;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   align-items: center;
 }
-.seat-card.team-a {
-  border-color: var(--team-a);
+.bot-add-row {
+  display: flex;
+  gap: 4px;
 }
-.seat-card.team-b {
-  border-color: var(--team-b);
+.bot-name-input {
+  width: 100px;
+  padding: 5px 8px;
+  font-size: 0.85rem;
+}
+.bot-add-row button {
+  padding: 5px 8px;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 .seat-card.top {
   top: 0;
@@ -453,15 +453,9 @@ input::placeholder {
 .seat-badge {
   background: #00000044;
   border-radius: 10px;
-  border-left: 4px solid;
+  border-left: 4px solid #eab30888;
   padding: 8px 12px;
   min-width: 130px;
-}
-.seat-badge.team-a {
-  border-color: var(--team-a);
-}
-.seat-badge.team-b {
-  border-color: var(--team-b);
 }
 .seat-badge.active {
   box-shadow: 0 0 0 3px #facc15aa;
@@ -485,6 +479,10 @@ input::placeholder {
 .tag.bidder {
   background: #eab308;
   color: #201a00;
+  font-weight: 700;
+}
+.tag.partner {
+  background: #7c3aed;
   font-weight: 700;
 }
 .tag.muted {
@@ -538,6 +536,21 @@ input::placeholder {
 .trick-card.winner .card {
   outline: 3px solid #facc15;
 }
+.trick-order {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  background: #000000cc;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  pointer-events: none;
+}
+.trick-order.lead {
+  background: #eab308;
+  color: #201a00;
+}
 .trick-note {
   position: absolute;
   bottom: 8px;
@@ -571,15 +584,20 @@ input::placeholder {
   font-weight: 700;
 }
 
-.trump-indicator {
+.hukum-panel {
   background: #00000044;
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hukum-row {
+  display: flex;
   align-items: center;
   gap: 10px;
 }
-.trump-label {
+.hukum-label {
   font-size: 0.75rem;
   text-transform: uppercase;
   opacity: 0.75;
@@ -590,6 +608,79 @@ input::placeholder {
 }
 .trump-suit.red {
   color: #fda4af;
+}
+.partner-status {
+  font-weight: 700;
+}
+
+.last-trick {
+  background: #00000044;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.last-trick-cards {
+  display: flex;
+  gap: 8px;
+}
+.last-trick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.last-trick-card .card {
+  width: 36px;
+  height: 52px;
+}
+.last-trick-card .card .card-rank {
+  font-size: 0.9rem;
+}
+.last-trick-card .card .card-suit {
+  font-size: 1rem;
+}
+.last-trick-who {
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+
+/* Declare dialog */
+.dialog.declare {
+  max-width: 520px;
+}
+.declare-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.declare-label {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+.suit-row,
+.rank-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.suit-btn,
+.rank-btn {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 800;
+}
+.suit-btn.red {
+  color: #c02020;
+}
+.suit-btn.selected,
+.rank-btn.selected {
+  outline: 3px solid #facc15;
+}
+.rank-btn:disabled {
+  opacity: 0.3;
 }
 
 .score-panel {
@@ -617,16 +708,19 @@ input::placeholder {
   letter-spacing: 3px;
   opacity: 0.8;
 }
-.score-row.team-a .team-name {
-  color: #93c5fd;
+.score-row.player {
+  flex-wrap: nowrap;
 }
-.score-row.team-b .team-name {
+.score-row.player.bid-team .player-name {
   color: #fcd34d;
 }
-.team-name {
-  flex: 1 1 100%;
+.player-name {
+  flex: 1;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .points {
   font-weight: 700;

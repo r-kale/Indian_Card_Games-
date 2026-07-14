@@ -133,7 +133,7 @@ export interface StoreApi {
   leaveRoom: () => void;
   takeSeat: (seat: Seat) => void;
   leaveSeat: () => void;
-  addBot: (seat: Seat) => void;
+  addBot: (seat: Seat, name?: string) => void;
   removeBot: (seat: Seat) => void;
   startGame: () => void;
   sendAction: (action: Action304) => void;
@@ -148,13 +148,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const localGame = useRef<LocalGame | null>(null);
   const p2pHost = useRef<P2PHost | null>(null);
   const p2pGuest = useRef<P2PGuest | null>(null);
+  /** Latest room snapshot, for naming seats in toasts. */
+  const roomRef = useRef<RoomState | null>(null);
+
+  const setRoomState = (roomState: RoomState) => {
+    roomRef.current = roomState;
+    dispatch({ type: 'roomState', roomState });
+  };
 
   const notifyEvent = (event: GameEvent) => {
-    const text = describeEvent(event);
+    const nameOf = (seat: number) =>
+      roomRef.current?.seats[seat]?.nickname ?? `Seat ${seat}`;
+    const text = describeEvent(event, nameOf);
     if (text === null) return;
     const toast: Toast = { id: ++toastId, text };
     dispatch({ type: 'toast', toast });
-    setTimeout(() => dispatch({ type: 'expireToast', id: toast.id }), 4000);
+    setTimeout(() => dispatch({ type: 'expireToast', id: toast.id }), 5000);
   };
 
   useEffect(() => {
@@ -177,7 +186,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     };
     const onDisconnect = () => dispatch({ type: 'connected', connected: false });
-    const onRoomState = (roomState: RoomState) => dispatch({ type: 'roomState', roomState });
+    const onRoomState = (roomState: RoomState) => setRoomState(roomState);
     const onView = (view: Player304View) => dispatch({ type: 'view', view });
     const onEvent = (event: GameEvent) => notifyEvent(event);
     const onRoomError = (e: { message: string }) => dispatch({ type: 'error', error: e.message });
@@ -209,7 +218,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const joinP2P = (code: string, nickname: string) => {
     const guest = new P2PGuest({
-      onRoom: (roomState) => dispatch({ type: 'roomState', roomState }),
+      onRoom: setRoomState,
       onView: (view) => dispatch({ type: 'view', view }),
       onEvent: notifyEvent,
       onError: fail,
@@ -292,7 +301,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (p2pHost.current === host) p2pHost.current = null;
           fail(message);
         },
-        onRoom: (roomState) => dispatch({ type: 'roomState', roomState }),
+        onRoom: setRoomState,
         onView: (view) => dispatch({ type: 'view', view }),
         onEvent: notifyEvent,
       });
@@ -305,6 +314,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       localGame.current?.destroy();
       localGame.current = game;
+      roomRef.current = game.roomState();
       dispatch({
         type: 'localStarted',
         session: { roomCode: 'SOLO', token: 'local', playerId: 'local-you' },
@@ -339,9 +349,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (p2pGuest.current !== null) return p2pGuest.current.leaveSeat();
       socket.emit('lobby:leaveSeat', ackOrError(fail));
     },
-    addBot: (seat) => {
-      if (p2pHost.current !== null) return hostOp((h) => h.addBot(seat));
-      socket.emit('lobby:addBot', { seat }, ackOrError(fail));
+    addBot: (seat, name) => {
+      if (p2pHost.current !== null) return hostOp((h) => h.addBot(seat, name));
+      socket.emit('lobby:addBot', { seat, name }, ackOrError(fail));
     },
     removeBot: (seat) => {
       if (p2pHost.current !== null) return hostOp((h) => h.removeBot(seat));
@@ -387,16 +397,18 @@ function ackOrError(fail: (e: string) => void) {
   };
 }
 
-function describeEvent(event: GameEvent): string | null {
+const SUIT_GLYPHS = { S: '♠', H: '♥', D: '♦', C: '♣' } as const;
+
+function describeEvent(event: GameEvent, nameOf: (seat: number) => string): string | null {
   switch (event.type) {
-    case 'trumpRevealed': {
-      const names = { S: 'Spades ♠', H: 'Hearts ♥', D: 'Diamonds ♦', C: 'Clubs ♣' } as const;
-      return `Trump revealed: ${names[event.suit]}`;
+    case 'partnerRevealed':
+      return `🎭 ${nameOf(event.seat)} is the partner! (${event.card.rank}${SUIT_GLYPHS[event.card.suit]})`;
+    case 'dealScored': {
+      const r = event.result;
+      return r.madeIt
+        ? `Bid of ${r.bid} made — ${nameOf(r.bidder)} & ${nameOf(r.partnerSeat)} score +1`
+        : `Bid of ${r.bid} failed — the defenders score +1`;
     }
-    case 'dealScored':
-      return event.result.madeIt
-        ? `Bid of ${event.result.bid} made! (+${event.result.deltas[event.result.bidTeam]})`
-        : `Bid of ${event.result.bid} failed (+2 to the defenders)`;
     case 'matchOver':
       return null; // the overlay handles this
     case 'trickWon':

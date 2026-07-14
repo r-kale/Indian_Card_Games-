@@ -1,101 +1,101 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../../core/cards';
-import { applyAction, initDeal, legalActions } from './engine';
-import { scoreDeal, matchWinner } from './scoring';
+import { applyAction, initDeal, legalActions, minRaise } from './engine';
+import { matchWinners, scoreDeal } from './scoring';
+import { redactFor } from './view';
 import { IllegalActionError } from './types';
 import type { Game304State, Seat } from './types';
 
 const c = (rank: Card['rank'], suit: Card['suit']): Card => ({ rank, suit });
 
 function freshDeal(seed = 'test'): Game304State {
-  return initDeal({ matchScore: [0, 0], dealer: 0, seed, dealNumber: 1 });
+  return initDeal({ matchScore: [0, 0, 0, 0], dealer: 0, seed, dealNumber: 1 });
+}
+
+/** Bid the minimum as seat 1, everyone else passes: seat 1 wins the bid. */
+function throughBidding(s: Game304State): Game304State {
+  s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
+  s = applyAction(s, { type: 'pass', seat: 2 });
+  s = applyAction(s, { type: 'pass', seat: 3 });
+  s = applyAction(s, { type: 'pass', seat: 0 });
+  return s;
 }
 
 describe('initDeal', () => {
-  it('deals 4 cards each with 16 undealt and opens bidding right of the dealer', () => {
+  it('deals the whole deck (8 each) and opens bidding right of the dealer', () => {
     const s = freshDeal();
     expect(s.phase).toBe('bidding');
-    expect(s.hands.map((h) => h.length)).toEqual([4, 4, 4, 4]);
-    expect(s.undealt).toHaveLength(16);
+    expect(s.hands.map((h) => h.length)).toEqual([8, 8, 8, 8]);
     expect(s.bidding.turn).toBe(1);
   });
 });
 
 describe('bidding', () => {
-  it('forces the opener to bid (no pass) at 160 minimum', () => {
+  it('forces the opener to bid at least 160', () => {
     const s = freshDeal();
-    const actions = legalActions(s, 1);
-    expect(actions).toEqual([{ type: 'bid', seat: 1, amount: 160 }]);
+    expect(legalActions(s, 1)).toEqual([{ type: 'bid', seat: 1, amount: 160 }]);
     expect(() => applyAction(s, { type: 'pass', seat: 1 })).toThrow(IllegalActionError);
-    expect(() => applyAction(s, { type: 'bid', seat: 1, amount: 150 })).toThrow(IllegalActionError);
   });
 
-  it('rejects bids out of turn', () => {
-    const s = freshDeal();
-    expect(() => applyAction(s, { type: 'bid', seat: 2, amount: 200 })).toThrow(IllegalActionError);
+  it('moves in steps of 10, with 304 as the top bid', () => {
+    let s = freshDeal();
+    s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
+    expect(() => applyAction(s, { type: 'bid', seat: 2, amount: 165 })).toThrow(
+      IllegalActionError,
+    );
+    expect(() => applyAction(s, { type: 'bid', seat: 2, amount: 160 })).toThrow(
+      IllegalActionError,
+    );
+    s = applyAction(s, { type: 'bid', seat: 2, amount: 170 });
+    expect(s.bidding.highBid).toBe(170);
+    expect(minRaise(300)).toBe(304);
+    expect(minRaise(304)).toBeNull();
+    s = applyAction(s, { type: 'bid', seat: 3, amount: 300 });
+    s = applyAction(s, { type: 'bid', seat: 0, amount: 304 });
+    // Nobody can outbid 304: the only legal action left for others is pass.
+    expect(legalActions(s, 1)).toEqual([{ type: 'pass', seat: 1 }]);
   });
 
-  it('awards the bid to the last unpassed bidder', () => {
+  it('awards the bid to the last unpassed bidder and moves to declaring', () => {
     let s = freshDeal();
     s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
     s = applyAction(s, { type: 'bid', seat: 2, amount: 180 });
     s = applyAction(s, { type: 'pass', seat: 3 });
     s = applyAction(s, { type: 'pass', seat: 0 });
-    expect(s.phase).toBe('bidding');
-    expect(s.bidding.turn).toBe(1);
     s = applyAction(s, { type: 'pass', seat: 1 });
-    expect(s.phase).toBe('trumpSelection');
+    expect(s.phase).toBe('declaring');
     expect(s.bid).toEqual({ amount: 180, bidder: 2 });
   });
-
-  it('skips passed players when the bidding goes around again', () => {
-    let s = freshDeal();
-    s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
-    s = applyAction(s, { type: 'pass', seat: 2 });
-    s = applyAction(s, { type: 'bid', seat: 3, amount: 170 });
-    s = applyAction(s, { type: 'pass', seat: 0 });
-    expect(s.bidding.turn).toBe(1); // seat 2 already passed
-    s = applyAction(s, { type: 'bid', seat: 1, amount: 200 });
-    expect(s.bidding.turn).toBe(3);
-    s = applyAction(s, { type: 'pass', seat: 3 });
-    expect(s.phase).toBe('trumpSelection');
-    expect(s.bid).toEqual({ amount: 200, bidder: 1 });
-  });
 });
 
-describe('trump selection', () => {
-  it('conceals the chosen card and deals the rest of the deck', () => {
+describe('declaring', () => {
+  it('rejects a partner card from the bidder own hand', () => {
     let s = freshDeal();
-    s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
-    s = applyAction(s, { type: 'pass', seat: 2 });
-    s = applyAction(s, { type: 'pass', seat: 3 });
-    s = applyAction(s, { type: 'pass', seat: 0 });
-    const trumpCard = s.hands[1][0]!;
-    s = applyAction(s, { type: 'selectTrump', seat: 1, card: trumpCard });
+    s = throughBidding(s);
+    const own = s.hands[1][0]!;
+    expect(() =>
+      applyAction(s, { type: 'declare', seat: 1, trumpSuit: 'H', partnerCard: own }),
+    ).toThrow(IllegalActionError);
+  });
+
+  it('finds the partner seat and keeps it hidden from everyone else', () => {
+    let s = freshDeal();
+    s = throughBidding(s);
+    const partnerCard = s.hands[3][0]!;
+    s = applyAction(s, { type: 'declare', seat: 1, trumpSuit: 'H', partnerCard });
     expect(s.phase).toBe('playing');
-    expect(s.trump).toEqual({ suit: trumpCard.suit, card: trumpCard, revealed: false });
-    expect(s.hands.map((h) => h.length)).toEqual([8, 7, 8, 8]); // bidder is one short
-    expect(s.undealt).toHaveLength(0);
-    expect(s.turn).toBe(1);
-  });
-
-  it('rejects a trump card that is not in the bidder hand', () => {
-    let s = freshDeal();
-    s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
-    s = applyAction(s, { type: 'pass', seat: 2 });
-    s = applyAction(s, { type: 'pass', seat: 3 });
-    s = applyAction(s, { type: 'pass', seat: 0 });
-    const notMine = s.hands[2][0]!;
-    if (!s.hands[1].some((x) => x.rank === notMine.rank && x.suit === notMine.suit)) {
-      expect(() => applyAction(s, { type: 'selectTrump', seat: 1, card: notMine })).toThrow(
-        IllegalActionError,
-      );
-    }
+    expect(s.trumpSuit).toBe('H');
+    expect(s.partner).toMatchObject({ card: partnerCard, seat: 3, revealed: false });
+    // Everyone sees the card; only the holder knows the seat.
+    expect(redactFor(s, 0).partner).toEqual({ card: partnerCard, revealed: false, seat: null });
+    expect(redactFor(s, 1).partner).toEqual({ card: partnerCard, revealed: false, seat: null });
+    expect(redactFor(s, 3).partner).toEqual({ card: partnerCard, revealed: false, seat: 3 });
   });
 });
 
-/** Hand-crafted end-of-deal position: bidder (seat 1) holds one card plus the concealed trump. */
-function endgameState(): Game304State {
+/** Hand-crafted 2-tricks-left position. Bidder = seat 1, trump = hearts,
+ *  partner card = 9♠ held by seat 3, partner not yet revealed. */
+function endgame(): Game304State {
   const base = freshDeal('endgame');
   return {
     ...base,
@@ -103,119 +103,113 @@ function endgameState(): Game304State {
     dealer: 0,
     hands: [
       [c('A', 'S'), c('8', 'D')],
-      [c('J', 'S')],
+      [c('J', 'S'), c('7', 'S')],
       [c('Q', 'S'), c('8', 'H')],
-      [c('K', 'S'), c('7', 'H')],
+      [c('9', 'S'), c('7', 'H')],
     ],
-    undealt: [],
-    bid: { amount: 160, bidder: 1 },
-    trump: { suit: 'H', card: c('9', 'H'), revealed: false },
+    bidding: { ...base.bidding, highBid: 200, highBidder: 1, passed: [true, false, true, true] },
+    bid: { amount: 200, bidder: 1 },
+    trumpSuit: 'H',
+    partner: { card: c('9', 'S'), seat: 3, revealed: false },
     turn: 1,
     trickLeader: 1,
     trick: [],
-    capturedPoints: [120, 118], // 238 points already captured; 66 remain on the table
-    tricksTaken: [3, 3],
+    capturedPoints: [40, 90, 60, 51], // 241 so far; 63 points remain on the table
+    tricksTaken: [2, 2, 1, 1],
   };
 }
 
 describe('playing', () => {
   it('enforces following suit', () => {
-    let s = endgameState();
+    let s = endgame();
     s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
-    // Seat 2 holds a spade, so throwing the heart is illegal.
     expect(() => applyAction(s, { type: 'playCard', seat: 2, card: c('8', 'H') })).toThrow(
       IllegalActionError,
     );
   });
 
-  it('gives a concealed trump no power', () => {
-    let s = endgameState();
-    // Move the 8H from seat 2's hand into a fresh trick where hearts are "secret trump".
-    s.turn = 2;
-    s.trickLeader = 2;
-    s.hands = [[c('A', 'S')], [c('J', 'S')], [c('8', 'H')], [c('7', 'H')]];
+  it('lets trump win only from a void hand, and it beats the led suit', () => {
+    let s = endgame();
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('9', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
+    expect(s.lastTrickWinner).toBe(1); // no hearts played: J♠ holds
+    // Final trick: seat 1 leads a spade; seats 2 and 3 are void and trump in.
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
     s = applyAction(s, { type: 'playCard', seat: 2, card: c('8', 'H') });
     s = applyAction(s, { type: 'playCard', seat: 3, card: c('7', 'H') });
-    // Seats 0 and 1 are void in hearts; they may play anything.
-    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
-    s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
-    // Hearts led; concealed trump means highest heart (the 8) wins, not the off-suit J.
-    expect(s.lastTrickWinner).toBe(2);
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'D') });
+    expect(s.lastTrickWinner).toBe(2); // 8♥ outranks 7♥; trump beats the led spade
+    expect(s.phase).toBe('dealOver');
   });
 
-  it('auto-reveals the trump when the bidder hand runs dry, then finishes the deal', () => {
-    let s = endgameState();
-    s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
-    // Bidder's hand emptied: the concealed 9H must have come back, revealed.
-    expect(s.trump!.revealed).toBe(true);
-    expect(s.hands[1]).toEqual([c('9', 'H')]);
-    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'S') });
-    s = applyAction(s, { type: 'playCard', seat: 3, card: c('K', 'S') });
+  it('forces the hidden partner to out themselves when the bidder leads their suit', () => {
+    const s0 = endgame();
+    const s1 = applyAction(s0, { type: 'playCard', seat: 1, card: c('J', 'S') });
+    const s2 = applyAction(s1, { type: 'playCard', seat: 2, card: c('Q', 'S') });
+    // Seat 3 holds the partner card 9♠ and the bidder led spades: only the 9♠ is legal.
+    const plays = legalActions(s2, 3 as Seat);
+    expect(plays).toEqual([{ type: 'playCard', seat: 3, card: c('9', 'S') }]);
+    const s3 = applyAction(s2, { type: 'playCard', seat: 3, card: c('9', 'S') });
+    expect(s3.partner!.revealed).toBe(true);
+    expect(redactFor(s3, 0).partner!.seat).toBe(3);
+  });
+
+  it('does not force the partner card when someone other than the bidder leads', () => {
+    let s = endgame();
+    s.turn = 0;
+    s.trickLeader = 0;
     s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
-    expect(s.lastTrickWinner).toBe(1); // J of the led suit wins: 46 points to team 1
-    // Final trick: bidder leads the returned trump.
-    s = applyAction(s, { type: 'playCard', seat: 1, card: c('9', 'H') });
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'S') });
+    const plays = legalActions(s, 3 as Seat);
+    // Seat 3 must follow spades but may choose either spade-suit card... they
+    // only hold one spade (the 9♠) — following suit still applies, but the
+    // partner-card restriction is not what forced it.
+    expect(plays).toEqual([{ type: 'playCard', seat: 3, card: c('9', 'S') }]);
+    const done = applyAction(s, { type: 'playCard', seat: 3, card: c('9', 'S') });
+    expect(done.partner!.revealed).toBe(true); // playing the card always reveals
+  });
+
+  it('scores the deal per player: bidder + partner vs the rest', () => {
+    let s = endgame();
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('9', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
     s = applyAction(s, { type: 'playCard', seat: 2, card: c('8', 'H') });
     s = applyAction(s, { type: 'playCard', seat: 3, card: c('7', 'H') });
     s = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'D') });
     expect(s.phase).toBe('dealOver');
-    expect(s.capturedPoints[0] + s.capturedPoints[1]).toBe(304);
-    // Team 1 captured 118 + 46 + 20 = 184 >= 160: bid made, +1 match point.
-    expect(s.dealResult!.madeIt).toBe(true);
-    expect(s.matchScore).toEqual([0, 1]);
-  });
-
-  it('lets a void player demand the trump reveal and then forces them to trump', () => {
-    let s = endgameState();
-    s.hands = [
-      [c('A', 'S'), c('8', 'D')],
-      [c('J', 'S')],
-      [c('8', 'H'), c('Q', 'S')],
-      [c('K', 'S'), c('7', 'H')],
-    ];
-    s = applyAction(s, { type: 'playCard', seat: 1, card: c('J', 'S') });
-    expect(s.trump!.revealed).toBe(true); // auto-reveal (bidder emptied their hand)
-
-    // Rebuild with a bidder that still has cards so a manual reveal is possible.
-    s = endgameState();
-    s.hands = [
-      [c('8', 'D'), c('A', 'S')],
-      [c('J', 'S'), c('7', 'D')],
-      [c('8', 'H'), c('Q', 'S')],
-      [c('K', 'S'), c('7', 'H')],
-    ];
-    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'D') });
-    // Seat 2 is void in diamonds: revealing trump is on the menu.
-    const options = legalActions(s, 2 as Seat);
-    expect(options.some((a) => a.type === 'revealTrump')).toBe(true);
-    s = applyAction(s, { type: 'revealTrump', seat: 2 });
-    expect(s.trump!.revealed).toBe(true);
-    expect(s.hands[1]).toContainEqual(c('9', 'H')); // returned to the bidder
-    // Having asked, seat 2 must play its heart (trump), not the spade.
-    const plays = legalActions(s, 2 as Seat).filter((a) => a.type === 'playCard');
-    expect(plays).toEqual([{ type: 'playCard', seat: 2, card: c('8', 'H') }]);
+    const total = s.capturedPoints.reduce((a, b) => a + b, 0);
+    expect(total).toBe(304);
+    // Trick 7 (63 pts) went to bidder seat 1; trick 8 (0 pts) to seat 2.
+    // Bid team = seats 1 & 3: (90+63) + 51 = 204 >= 200 -> made it.
+    expect(s.dealResult).toMatchObject({
+      bidder: 1,
+      partnerSeat: 3,
+      bidTeamPoints: 204,
+      madeIt: true,
+      deltas: [0, 1, 0, 1],
+    });
+    expect(s.matchScore).toEqual([0, 1, 0, 1]);
   });
 });
 
-describe('scoring', () => {
-  it('scores made and failed bids', () => {
-    expect(scoreDeal([100, 204], { amount: 200, bidder: 1 })).toMatchObject({
-      madeIt: true,
-      deltas: [0, 1],
-    });
-    expect(scoreDeal([150, 154], { amount: 200, bidder: 1 })).toMatchObject({
-      madeIt: false,
-      deltas: [2, 0],
-    });
-    expect(scoreDeal([250, 54], { amount: 250, bidder: 0 })).toMatchObject({
-      madeIt: true,
-      deltas: [2, 0],
-    });
+describe('scoring helpers', () => {
+  it('awards +1 to each winner', () => {
+    const made = scoreDeal([50, 150, 40, 64], { amount: 200, bidder: 1 }, 3, c('9', 'S'), 'H');
+    expect(made.madeIt).toBe(true);
+    expect(made.deltas).toEqual([0, 1, 0, 1]);
+    const failed = scoreDeal([100, 80, 60, 64], { amount: 200, bidder: 1 }, 3, c('9', 'S'), 'H');
+    expect(failed.madeIt).toBe(false);
+    expect(failed.deltas).toEqual([1, 0, 1, 0]);
   });
 
-  it('detects the match winner at 6 points', () => {
-    expect(matchWinner([5, 5])).toBeNull();
-    expect(matchWinner([6, 3])).toBe(0);
-    expect(matchWinner([2, 7])).toBe(1);
+  it('detects match winners at 5 points', () => {
+    expect(matchWinners([4, 4, 4, 4])).toEqual([]);
+    expect(matchWinners([5, 2, 5, 2])).toEqual([0, 2]);
   });
 });

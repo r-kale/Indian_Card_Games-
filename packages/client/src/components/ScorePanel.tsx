@@ -1,12 +1,10 @@
 import { MATCH_TARGET } from '@icg/shared';
 import type { Player304View, RoomState, Seat } from '@icg/shared';
 
+/** Per-player scores: partnerships change every deal, so everyone has their own tally. */
 export function ScorePanel({ view, room }: { view: Player304View; room: RoomState }) {
   const name = (seat: Seat) => room.seats[seat]?.nickname ?? `Seat ${seat}`;
-  const teamLabel = (team: 0 | 1) =>
-    team === 0 ? `${name(0)} & ${name(2)}` : `${name(1)} & ${name(3)}`;
-  const bidTeam = view.bid !== null ? ((view.bid.bidder % 2) as 0 | 1) : null;
-
+  const bidTeamKnown = view.partner !== null && view.partner.revealed;
   return (
     <div className="score-panel">
       <div className="score-row header">
@@ -20,17 +18,19 @@ export function ScorePanel({ view, room }: { view: Player304View; room: RoomStat
           </span>
         </div>
       )}
-      {(['0', '1'] as const).map((t) => {
-        const team = Number(t) as 0 | 1;
+      {([0, 1, 2, 3] as Seat[]).map((seat) => {
+        const onBidTeam =
+          view.bid !== null &&
+          (seat === view.bid.bidder || (bidTeamKnown && seat === view.partner!.seat));
         return (
-          <div key={t} className={`score-row team-${team === 0 ? 'a' : 'b'}`}>
-            <span className="team-name">{teamLabel(team)}</span>
-            <span className="points">
-              {view.capturedPoints[team]} pts
-              {bidTeam === team ? ` / ${view.bid!.amount}` : ''}
+          <div key={seat} className={`score-row player ${onBidTeam ? 'bid-team' : ''}`}>
+            <span className="player-name">
+              {name(seat)}
+              {seat === view.seat ? ' (you)' : ''}
             </span>
+            <span className="points">{view.capturedPoints[seat]} pts</span>
             <span className="match">
-              ★ {view.matchScore[team]}/{MATCH_TARGET}
+              ★ {view.matchScore[seat]}/{MATCH_TARGET}
             </span>
           </div>
         );

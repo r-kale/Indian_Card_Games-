@@ -25,7 +25,7 @@ export class LocalGame {
     private readonly onView: (view: Player304View) => void,
   ) {
     this.state = initDeal({
-      matchScore: [0, 0],
+      matchScore: [0, 0, 0, 0],
       dealer: 0,
       seed: `local-${Date.now()}-${Math.random()}`,
       dealNumber: 1,
@@ -69,7 +69,14 @@ export class LocalGame {
     if (this.state.phase === 'matchOver' || this.state.phase === 'dealOver') return;
     const seat = actingSeat(this.state);
     if (seat === null || seat === 0) return; // the human is on the clock
-    this.timer = setTimeout(() => this.playBot(seat), 500 + Math.random() * 500);
+    const newTrick =
+      this.state.phase === 'playing' &&
+      this.state.trick.length === 0 &&
+      this.state.lastTrick !== null;
+    this.timer = setTimeout(
+      () => this.playBot(seat),
+      newTrick ? 2300 + Math.random() * 400 : 500 + Math.random() * 500,
+    );
   }
 
   private playBot(seat: Seat): void {

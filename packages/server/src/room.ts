@@ -26,6 +26,9 @@ export type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 const BOT_NAMES = ['Bot Chandu', 'Bot Meena', 'Bot Raju', 'Bot Lakshmi'];
 const BOT_DELAY_MS = () => 600 + Math.floor(Math.random() * 600);
+/** Extra thinking time before the first card of a new trick, so the finished
+ *  trick stays on the table long enough for everyone to see it. */
+const NEW_TRICK_DELAY_MS = () => 2300 + Math.floor(Math.random() * 400);
 const DISCONNECT_GRACE_MS = 30_000;
 const DEAL_OVER_AUTO_MS = 12_000;
 const MATCH_OVER_AUTO_MS = 20_000;
@@ -131,16 +134,22 @@ export class Room {
     this.broadcast();
   }
 
-  addBot(token: string, seat: Seat): void {
+  addBot(token: string, seat: Seat, name?: string): void {
     this.assertLobby();
     this.assertHost(token);
     if (this.seats[seat] !== null) throw new RoomError('seat is taken');
-    const used = new Set(
-      this.seats.filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot').map((s) => s.name),
-    );
-    const name = BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${seat}`;
-    this.seats[seat] = { kind: 'bot', name };
+    const custom = name?.trim().slice(0, 20);
+    this.seats[seat] = { kind: 'bot', name: custom || this.defaultBotName(seat) };
     this.broadcast();
+  }
+
+  private defaultBotName(seat: Seat): string {
+    const used = new Set(
+      this.seats
+        .filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot')
+        .map((s) => s.name),
+    );
+    return BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${seat}`;
   }
 
   removeBot(token: string, seat: Seat): void {
@@ -159,7 +168,7 @@ export class Room {
     }
     this.phase = 'inGame';
     this.game = initDeal({
-      matchScore: [0, 0],
+      matchScore: [0, 0, 0, 0],
       dealer: 0,
       seed: randomUUID(),
       dealNumber: 1,
@@ -170,11 +179,7 @@ export class Room {
   }
 
   private addBotToSeat(seat: Seat): void {
-    const used = new Set(
-      this.seats.filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot').map((s) => s.name),
-    );
-    const name = BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${seat}`;
-    this.seats[seat] = { kind: 'bot', name };
+    this.seats[seat] = { kind: 'bot', name: this.defaultBotName(seat) };
   }
 
   toLobby(token: string): void {
@@ -236,7 +241,12 @@ export class Room {
     const entry = this.seats[seat];
     if (entry === null) return;
     if (entry.kind === 'bot') {
-      this.timer = setTimeout(() => this.playBotMove(seat), BOT_DELAY_MS());
+      const newTrick =
+        game.phase === 'playing' && game.trick.length === 0 && game.lastTrick !== null;
+      this.timer = setTimeout(
+        () => this.playBotMove(seat),
+        newTrick ? NEW_TRICK_DELAY_MS() : BOT_DELAY_MS(),
+      );
       return;
     }
     const player = this.players.get(entry.token);

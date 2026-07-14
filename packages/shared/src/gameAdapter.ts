@@ -22,7 +22,7 @@ export interface GameEngine<S, A, V> {
 
 export const game304Engine: GameEngine<Game304State, Action304, Player304View> = {
   seatCount: 4,
-  init: ({ seed }) => initDeal({ matchScore: [0, 0], dealer: 0, seed, dealNumber: 1 }),
+  init: ({ seed }) => initDeal({ matchScore: [0, 0, 0, 0], dealer: 0, seed, dealNumber: 1 }),
   actingSeat: (state) => actingSeat(state),
   legalActions: (state, seat) => legalActions(state, seat as Seat),
   apply: (state, action) => applyAction(state, action),

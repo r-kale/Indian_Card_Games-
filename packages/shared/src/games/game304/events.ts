@@ -1,5 +1,5 @@
 import { cardPoints } from '../../core/cards';
-import { matchWinner } from './scoring';
+import { matchWinners } from './scoring';
 import type { GameEvent } from '../../protocol/events';
 import type { Game304State } from './types';
 
@@ -19,15 +19,19 @@ export function deriveEvents(prev: Game304State, next: Game304State): GameEvent[
       points: next.lastTrick.reduce((s, p) => s + cardPoints(p.card), 0),
     });
   }
-  if (prev.trump !== null && !prev.trump.revealed && next.trump?.revealed === true) {
-    events.push({ type: 'trumpRevealed', suit: next.trump.suit });
+  if (
+    prev.partner !== null &&
+    !prev.partner.revealed &&
+    next.partner?.revealed === true &&
+    next.phase === 'playing' // showdown reveal at deal end is covered by dealScored
+  ) {
+    events.push({ type: 'partnerRevealed', seat: next.partner.seat, card: next.partner.card });
   }
   if (prev.dealResult === null && next.dealResult !== null) {
     events.push({ type: 'dealScored', result: next.dealResult });
   }
   if (next.phase === 'matchOver' && prev.phase !== 'matchOver') {
-    const winner = matchWinner(next.matchScore);
-    if (winner !== null) events.push({ type: 'matchOver', winner });
+    events.push({ type: 'matchOver', winners: matchWinners(next.matchScore) });
   }
   return events;
 }

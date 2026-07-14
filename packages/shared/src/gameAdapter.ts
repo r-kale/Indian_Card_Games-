@@ -19,6 +19,16 @@ import { deriveEvents as eventsLaddis } from './games/laddis/events';
 import { redactFor as redactLaddis } from './games/laddis/view';
 import { teamOf as laddisTeamOf } from './games/laddis/types';
 import type { LaddisAction, LaddisState, LaddisView, Seat as LaddisSeat } from './games/laddis/types';
+import {
+  actingSeat as actingSeatBadam,
+  applyAction as applyBadam,
+  initRound as initBadamRound,
+  legalActions as legalBadam,
+} from './games/badam7/engine';
+import { chooseAction as botBadamChoose } from './games/badam7/bot';
+import { deriveEvents as eventsBadam } from './games/badam7/events';
+import { redactFor as redactBadam } from './games/badam7/view';
+import type { BadamAction, BadamState, BadamView } from './games/badam7/types';
 import type { GameEvent } from './protocol/events';
 import type { GameId } from './protocol/room';
 import type { Rng } from './core/rng';
@@ -28,8 +38,10 @@ import type { Rng } from './core/rng';
  * Every game on the platform is one implementation of this interface.
  */
 export interface GameEngine<S, A, V> {
-  seatCount: number;
-  init(config: { seed: string; hostSeat?: number }): S;
+  /** Seat range: fixed games have minSeats === maxSeats. */
+  minSeats: number;
+  maxSeats: number;
+  init(config: { seed: string; hostSeat?: number; players?: number }): S;
   /** Seat that must act now, or null when nobody is on the clock. */
   actingSeat(state: S): number | null;
   legalActions(state: S, seat: number): A[];
@@ -47,7 +59,8 @@ export interface GameEngine<S, A, V> {
 }
 
 export const game304Engine: GameEngine<Game304State, Action304, Player304View> = {
-  seatCount: 4,
+  minSeats: 4,
+  maxSeats: 4,
   init: ({ seed }) => initDeal({ matchScore: [0, 0, 0, 0], dealer: 0, seed, dealNumber: 1 }),
   actingSeat: (state) => actingSeat304(state),
   legalActions: (state, seat) => legal304(state, seat as Seat),
@@ -64,7 +77,8 @@ export const game304Engine: GameEngine<Game304State, Action304, Player304View> =
 };
 
 export const laddisEngine: GameEngine<LaddisState, LaddisAction, LaddisView> = {
-  seatCount: 4,
+  minSeats: 4,
+  maxSeats: 4,
   init: ({ seed, hostSeat }) =>
     initRound({
       deficit: 0,
@@ -87,10 +101,35 @@ export const laddisEngine: GameEngine<LaddisState, LaddisAction, LaddisView> = {
   hostOnly: (action) => action.type === 'endMatch',
 };
 
+export const badam7Engine: GameEngine<BadamState, BadamAction, BadamView> = {
+  minSeats: 3,
+  maxSeats: 8,
+  init: ({ seed, players }) =>
+    initBadamRound({
+      players: players ?? 4,
+      dealer: 0,
+      totals: Array.from({ length: players ?? 4 }, () => 0),
+      seed,
+      roundNumber: 1,
+    }),
+  actingSeat: (state) => actingSeatBadam(state),
+  legalActions: (state, seat) => legalBadam(state, seat),
+  apply: (state, action) => applyBadam(state, action),
+  viewFor: (state, seat) => redactBadam(state, seat),
+  botAction: (view, rng) => botBadamChoose(view, rng),
+  deriveEvents: (prev, next) => eventsBadam(prev, next),
+  phaseKind: (state) =>
+    state.phase === 'matchOver' ? 'matchOver' : state.phase === 'roundOver' ? 'roundOver' : 'acting',
+  autoAdvance: () => ({ type: 'nextRound', seat: 0 }),
+  newTrickPause: () => false,
+  hostOnly: (action) => action.type === 'endMatch',
+};
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type AnyGameEngine = GameEngine<any, any, any>;
 
 export const engines: Record<GameId, AnyGameEngine> = {
   game304: game304Engine,
   laddis: laddisEngine,
+  badam7: badam7Engine,
 };

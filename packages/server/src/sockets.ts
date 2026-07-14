@@ -1,4 +1,5 @@
-import type { Seat } from '@icg/shared';
+import { engines, MAX_PLAYERS_PER_ROOM } from '@icg/shared';
+import type { GameId } from '@icg/shared';
 import { RoomError } from './room';
 import type { IoServer, IoSocket } from './room';
 import type { RoomManager } from './roomManager';
@@ -68,8 +69,10 @@ export function wireSockets(io: IoServer, rooms: RoomManager): void {
     );
     socket.on('lobby:setGame', (p, ack) =>
       inRoom(socket, rooms, ack, (room, token) => {
-        if (p?.gameId !== 'game304' && p?.gameId !== 'laddis') throw new RoomError('unknown game');
-        room.setGame(token, p.gameId);
+        if (typeof p?.gameId !== 'string' || !(p.gameId in engines)) {
+          throw new RoomError('unknown game');
+        }
+        room.setGame(token, p.gameId as GameId);
       }),
     );
     socket.on('lobby:start', (ack) => inRoom(socket, rooms, ack, (room, token) => room.start(token)));
@@ -127,7 +130,14 @@ function requireNickname(value: unknown): string {
   return nickname;
 }
 
-function requireSeat(value: unknown): Seat {
-  if (value !== 0 && value !== 1 && value !== 2 && value !== 3) throw new RoomError('bad seat');
+function requireSeat(value: unknown): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value >= MAX_PLAYERS_PER_ROOM
+  ) {
+    throw new RoomError('bad seat');
+  }
   return value;
 }

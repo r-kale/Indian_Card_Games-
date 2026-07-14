@@ -21,4 +21,14 @@ export type {
 } from './games/laddis/types';
 export { VAKHAAI_BETS, KALYAS_PER_LADDOO, KALYAS_PER_ARDHA } from './games/laddis/types';
 export { formatKalyas } from './games/laddis/scoring';
+export * as badam7 from './games/badam7/index';
+export type {
+  BadamAction,
+  BadamView,
+  BadamState,
+  BadamPhase,
+  BadamRoundResult,
+  SuitLayout,
+} from './games/badam7/types';
+export { matchWinners as badamMatchWinners } from './games/badam7/types';
 export * from './gameAdapter';

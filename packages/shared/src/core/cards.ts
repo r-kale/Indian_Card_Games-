@@ -1,5 +1,18 @@
 export type Suit = 'S' | 'H' | 'D' | 'C';
-export type Rank = 'J' | '9' | 'A' | '10' | 'K' | 'Q' | '8' | '7';
+export type Rank =
+  | 'A'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
+  | '10'
+  | 'J'
+  | 'Q'
+  | 'K';
 
 export interface Card {
   rank: Rank;
@@ -23,7 +36,46 @@ export const CARD_POINTS: Record<Rank, number> = {
   Q: 2,
   '8': 0,
   '7': 0,
+  '6': 0,
+  '5': 0,
+  '4': 0,
+  '3': 0,
+  '2': 0,
 };
+
+/** Numeric sequence position (Badam 7 layouts): A=1 up to K=13. */
+export const RANK_VALUE: Record<Rank, number> = {
+  A: 1,
+  '2': 2,
+  '3': 3,
+  '4': 4,
+  '5': 5,
+  '6': 6,
+  '7': 7,
+  '8': 8,
+  '9': 9,
+  '10': 10,
+  J: 11,
+  Q: 12,
+  K: 13,
+};
+
+/** Rank at a given sequence value, the inverse of RANK_VALUE. */
+export const RANK_AT_VALUE: readonly Rank[] = [
+  'A',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '10',
+  'J',
+  'Q',
+  'K',
+];
 
 export const SUIT_NAMES: Record<Suit, string> = {
   S: 'Spades',
@@ -53,6 +105,24 @@ export function buildDeck32(): Card[] {
     }
   }
   return deck;
+}
+
+/** Build the full 52-card deck (Badam 7). */
+export function buildDeck52(): Card[] {
+  const deck: Card[] = [];
+  for (const suit of SUITS) {
+    for (const rank of RANK_AT_VALUE) {
+      deck.push({ rank, suit });
+    }
+  }
+  return deck;
+}
+
+/** Rank sitting at sequence value v (1=A … 13=K). */
+export function rankAtValue(v: number): Rank {
+  const rank = RANK_AT_VALUE[v - 1];
+  if (rank === undefined) throw new Error(`no rank at value ${v}`);
+  return rank;
 }
 
 /** Lower index = stronger card under the given ranking. */

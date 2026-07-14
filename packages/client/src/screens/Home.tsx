@@ -18,7 +18,7 @@ export function Home() {
       <h1>
         Indian Card Games <span className="game-tag">304</span>
       </h1>
-      <p className="subtitle">Partnership trick-taking for 4 players — bots fill empty seats.</p>
+      <p className="subtitle">304, Laddis and Badam 7 — up to 8 players, bots fill empty seats.</p>
 
       <label className="field">
         Your name
@@ -46,6 +46,13 @@ export function Home() {
             onClick={() => startLocalGame(nickname, 'laddis')}
           >
             Play Laddis vs bots
+          </button>
+          <button
+            className="primary grow"
+            disabled={!ready}
+            onClick={() => startLocalGame(nickname, 'badam7')}
+          >
+            Play Badam 7 vs bots
           </button>
         </div>
 

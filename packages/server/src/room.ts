@@ -8,7 +8,6 @@ import type {
   GameId,
   RoomState,
   Rng,
-  Seat,
   SeatInfo,
   ServerToClientEvents,
 } from '@icg/shared';
@@ -16,7 +15,16 @@ import type {
 export type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 export type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
-const BOT_NAMES = ['Bot Chandu', 'Bot Meena', 'Bot Raju', 'Bot Lakshmi'];
+const BOT_NAMES = [
+  'Bot Chandu',
+  'Bot Meena',
+  'Bot Raju',
+  'Bot Lakshmi',
+  'Bot Ganpat',
+  'Bot Shalu',
+  'Bot Pinky',
+  'Bot Bablu',
+];
 const BOT_DELAY_MS = () => 600 + Math.floor(Math.random() * 600);
 /** Extra thinking time before the first card of a new trick, so the finished
  *  trick stays on the table long enough for everyone to see it. */
@@ -40,12 +48,7 @@ export class Room {
   /** Session token of the room creator; set right after the host joins. */
   hostToken = '';
   readonly players = new Map<string, HumanPlayer>();
-  seats: [SeatEntry | null, SeatEntry | null, SeatEntry | null, SeatEntry | null] = [
-    null,
-    null,
-    null,
-    null,
-  ];
+  seats: (SeatEntry | null)[] = [null, null, null, null];
   phase: 'lobby' | 'inGame' = 'lobby';
   gameId: GameId = 'game304';
   game: unknown = null;
@@ -54,6 +57,13 @@ export class Room {
 
   private get engine(): AnyGameEngine {
     return engines[this.gameId];
+  }
+
+  /** In the lobby, show one slot per possible seat for the selected game. */
+  private resizeSeats(): void {
+    const size = this.engine.maxSeats;
+    while (this.seats.length > size) this.seats.pop();
+    while (this.seats.length < size) this.seats.push(null);
   }
 
   private readonly io: IoServer;
@@ -83,10 +93,10 @@ export class Room {
     return player;
   }
 
-  seatOf(token: string): Seat | null {
-    for (let i = 0; i < 4; i++) {
+  seatOf(token: string): number | null {
+    for (let i = 0; i < this.seats.length; i++) {
       const entry = this.seats[i];
-      if (entry?.kind === 'human' && entry.token === token) return i as Seat;
+      if (entry?.kind === 'human' && entry.token === token) return i;
     }
     return null;
   }
@@ -115,8 +125,9 @@ export class Room {
 
   // ---- lobby actions ----------------------------------------------------
 
-  takeSeat(token: string, seat: Seat): void {
+  takeSeat(token: string, seat: number): void {
     this.assertLobby();
+    this.assertSeatIndex(seat);
     if (this.seats[seat] !== null) throw new RoomError('seat is taken');
     const current = this.seatOf(token);
     if (current !== null) this.seats[current] = null;
@@ -131,16 +142,17 @@ export class Room {
     this.broadcast();
   }
 
-  addBot(token: string, seat: Seat, name?: string): void {
+  addBot(token: string, seat: number, name?: string): void {
     this.assertLobby();
     this.assertHost(token);
+    this.assertSeatIndex(seat);
     if (this.seats[seat] !== null) throw new RoomError('seat is taken');
     const custom = name?.trim().slice(0, 20);
     this.seats[seat] = { kind: 'bot', name: custom || this.defaultBotName(seat) };
     this.broadcast();
   }
 
-  private defaultBotName(seat: Seat): string {
+  private defaultBotName(seat: number): string {
     const used = new Set(
       this.seats
         .filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot')
@@ -149,7 +161,7 @@ export class Room {
     return BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${seat}`;
   }
 
-  removeBot(token: string, seat: Seat): void {
+  removeBot(token: string, seat: number): void {
     this.assertLobby();
     this.assertHost(token);
     if (this.seats[seat]?.kind !== 'bot') throw new RoomError('no bot on that seat');
@@ -162,26 +174,38 @@ export class Room {
     this.assertHost(token);
     if (!(gameId in engines)) throw new RoomError('unknown game');
     this.gameId = gameId;
+    this.resizeSeats();
     this.broadcast();
   }
 
+  /**
+   * Fixed-size games fill every empty seat with a bot. Variable-size games
+   * (Badam 7) play with whoever is seated: gaps close up, and fewer than four
+   * seated players get bot company up to a table of four.
+   */
   start(token: string): void {
     this.assertLobby();
     this.assertHost(token);
-    for (let i = 0; i < 4; i++) {
-      if (this.seats[i] === null) this.addBotToSeat(i as Seat);
+    if (this.engine.minSeats === this.engine.maxSeats) {
+      for (let i = 0; i < this.seats.length; i++) {
+        if (this.seats[i] === null) this.addBotToSeat(i);
+      }
+    } else {
+      this.seats = this.seats.filter((s) => s !== null);
+      while (this.seats.length < 4) this.addBotToSeat(this.seats.length);
     }
     this.phase = 'inGame';
     this.game = this.engine.init({
       seed: randomUUID(),
       hostSeat: this.seatOf(token) ?? 0,
+      players: this.seats.length,
     });
     this.broadcast();
     this.broadcastGame();
     this.reschedule();
   }
 
-  private addBotToSeat(seat: Seat): void {
+  private addBotToSeat(seat: number): void {
     this.seats[seat] = { kind: 'bot', name: this.defaultBotName(seat) };
   }
 
@@ -189,6 +213,7 @@ export class Room {
     this.assertHost(token);
     this.phase = 'lobby';
     this.game = null;
+    this.resizeSeats();
     this.clearTimer();
     this.broadcast();
   }
@@ -244,9 +269,9 @@ export class Room {
       return;
     }
 
-    const seat = this.engine.actingSeat(game) as Seat | null;
+    const seat = this.engine.actingSeat(game) as number | null;
     if (seat === null) return;
-    const entry = this.seats[seat];
+    const entry = this.seats[seat] ?? null;
     if (entry === null) return;
     if (entry.kind === 'bot') {
       this.timer = setTimeout(
@@ -261,7 +286,7 @@ export class Room {
     }
   }
 
-  private playBotMove(seat: Seat): void {
+  private playBotMove(seat: number): void {
     if (this.phase !== 'inGame' || this.game === null) return;
     if (this.engine.actingSeat(this.game) !== seat) return;
     try {
@@ -338,6 +363,12 @@ export class Room {
 
   private assertLobby(): void {
     if (this.phase !== 'lobby') throw new RoomError('not in the lobby');
+  }
+
+  private assertSeatIndex(seat: number): void {
+    if (!Number.isInteger(seat) || seat < 0 || seat >= this.seats.length) {
+      throw new RoomError('bad seat');
+    }
   }
 
   private assertHost(token: string): void {

@@ -1,10 +1,11 @@
 export type RoomPhase = 'lobby' | 'inGame';
 
-export type GameId = 'game304' | 'laddis';
+export type GameId = 'game304' | 'laddis' | 'badam7';
 
 export const GAME_NAMES: Record<GameId, string> = {
   game304: '304 (hidden partner)',
   laddis: 'Laddis',
+  badam7: 'Badam 7',
 };
 
 export interface SeatInfo {
@@ -25,7 +26,8 @@ export interface RoomState {
   code: string;
   phase: RoomPhase;
   gameId: GameId;
-  seats: [SeatInfo | null, SeatInfo | null, SeatInfo | null, SeatInfo | null];
+  /** One slot per seat; length varies by game (4 for 304/Laddis, up to 8 for Badam 7). */
+  seats: (SeatInfo | null)[];
   spectators: SpectatorInfo[];
   hostId: string;
 }

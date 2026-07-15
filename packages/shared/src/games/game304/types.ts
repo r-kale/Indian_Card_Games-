@@ -11,6 +11,12 @@ export const BID_RAISE_MIN = 10;
 export const BID_STEP = 5;
 /** First player to this many points wins the match (+1 per deal won). */
 export const MATCH_TARGET = 5;
+/** A marriage (K+Q of one suit in one hand) shifts the bid target by 20… */
+export const MARRIAGE_SHIFT = 20;
+/** …or by 40 when the pair is in the hukum suit itself. */
+export const MARRIAGE_SHIFT_HUKUM = 40;
+/** The last trick shifts the bid target by 10 (down for the bid side, up for defenders). */
+export const LAST_TRICK_SHIFT = 10;
 
 export function nextSeat(seat: Seat): Seat {
   return ((seat + 1) % 4) as Seat;
@@ -47,6 +53,12 @@ export interface PartnerState {
   status: PartnerStatus;
 }
 
+/** A K+Q pair held in one hand, announced after the hukum is declared. */
+export interface Marriage {
+  seat: Seat;
+  suit: Suit;
+}
+
 export interface DealResult {
   bid: number;
   bidder: Seat;
@@ -57,6 +69,12 @@ export interface DealResult {
   alliance: 'allied' | 'lone';
   /** Points captured by the bidder's side (bidder + partner, or bidder alone). */
   bidTeamPoints: number;
+  /** Marriage adjustments: negative shifts help the bid side, positive hurt. */
+  marriages: (Marriage & { shift: number })[];
+  /** −10 when the bid side took the last trick, +10 when the defenders did. */
+  lastTrickShift: number;
+  /** The bid after marriage and last-trick shifts — the real target. */
+  effectiveBid: number;
   madeIt: boolean;
   /** Match points per seat: +1 each on the winning side; a lone bidder wins +2. */
   deltas: [number, number, number, number];
@@ -79,6 +97,8 @@ export interface Game304State {
   tricksTaken: [number, number, number, number];
   lastTrick: TrickPlay[] | null;
   lastTrickWinner: Seat | null;
+  /** Detected once the hukum is declared; public from then on. */
+  marriages: Marriage[];
   dealResult: DealResult | null;
   /** Per-player match score; partnerships change every deal. */
   matchScore: [number, number, number, number];
@@ -114,6 +134,8 @@ export interface Player304View {
   tricksTaken: [number, number, number, number];
   lastTrick: TrickPlay[] | null;
   lastTrickWinner: Seat | null;
+  /** Marriages are shown to the whole table once the hukum is declared. */
+  marriages: Marriage[];
   dealResult: DealResult | null;
   matchScore: [number, number, number, number];
   /** Legal actions for THIS viewer right now (empty when it is not their turn). */

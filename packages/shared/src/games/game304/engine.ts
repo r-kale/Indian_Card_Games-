@@ -1,4 +1,4 @@
-import { buildDeck32, cardPoints, cardsEqual, RANK_ORDER_304 } from '../../core/cards';
+import { buildDeck32, cardPoints, cardsEqual, RANK_ORDER_304, SUITS } from '../../core/cards';
 import type { Card, Suit } from '../../core/cards';
 import { makeRng, shuffle } from '../../core/rng';
 import { legalFollows, ledSuit, trickWinner } from '../../core/tricks';
@@ -39,6 +39,7 @@ export function initDeal(config: DealConfig): Game304State {
     tricksTaken: [0, 0, 0, 0],
     lastTrick: null,
     lastTrickWinner: null,
+    marriages: [],
     dealResult: null,
     matchScore: config.matchScore,
     seed: config.seed,
@@ -239,10 +240,25 @@ function applyDeclare(s: Game304State, seat: Seat, trumpSuit: Suit, partnerCard:
   if (partnerSeat === null) fail('no such card in play');
   s.trumpSuit = trumpSuit;
   s.partner = { card: partnerCard, seat: partnerSeat, status: 'hidden' };
+  // Marriages (K+Q of one suit in one hand) are shown to the table now that
+  // the hukum is known; they shift the bid target when the deal is scored.
+  s.marriages = detectMarriages(s.hands);
   s.phase = 'playing';
   // The bid winner leads the first trick.
   s.turn = seat;
   s.trickLeader = seat;
+}
+
+function detectMarriages(hands: Game304State['hands']): Game304State['marriages'] {
+  const marriages: Game304State['marriages'] = [];
+  for (let seat = 0; seat < 4; seat++) {
+    for (const suit of SUITS) {
+      const has = (rank: Card['rank']) =>
+        hands[seat as Seat].some((c) => c.rank === rank && c.suit === suit);
+      if (has('K') && has('Q')) marriages.push({ seat: seat as Seat, suit });
+    }
+  }
+  return marriages;
 }
 
 function applyPlayCard(s: Game304State, seat: Seat, card: Card): void {
@@ -298,6 +314,8 @@ function finishDeal(s: Game304State): void {
     partner.card,
     s.trumpSuit!,
     alliance,
+    s.marriages,
+    s.lastTrickWinner!,
   );
   s.matchScore = s.matchScore.map((v, i) => v + s.dealResult!.deltas[i]!) as Game304State['matchScore'];
   s.phase = 'dealOver';

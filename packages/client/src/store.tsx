@@ -434,6 +434,10 @@ function describeEvent(event: GameEvent, nameOf: (seat: number) => string): stri
         ? `Round made \u2014 the shuffling side ${dir} kalyas`
         : `Round failed \u2014 the shuffling side ${dir} kalyas`;
     }
+    case 'marriageShown': {
+      const names = { S: 'Spades ♠', H: 'Hearts ♥', D: 'Diamonds ♦', C: 'Clubs ♣' } as const;
+      return `💍 ${nameOf(event.seat)} shows a marriage — K+Q of ${names[event.suit]}${event.hukum ? ' (hukum! ±40)' : ' (±20)'}`;
+    }
     case 'badamPassed':
       return `${nameOf(event.seat)} passes`;
     case 'badamRoundScored': {

@@ -157,6 +157,18 @@ export function Table() {
                 : `playing alone — the partner trick was lost${view.dealResult.madeIt ? ', +2!' : ''}`}
               .
             </p>
+            {view.dealResult.effectiveBid !== view.dealResult.bid && (
+              <p className="bid-shifts">
+                Target shifted to <strong>{view.dealResult.effectiveBid}</strong>:{' '}
+                {[
+                  ...view.dealResult.marriages.map(
+                    (m) =>
+                      `${nameOf(m.seat)}'s K+Q ${{ S: '♠', H: '♥', D: '♦', C: '♣' }[m.suit]} ${m.shift > 0 ? '+' : ''}${m.shift}`,
+                  ),
+                  `last trick ${view.dealResult.lastTrickShift > 0 ? '+' : ''}${view.dealResult.lastTrickShift}`,
+                ].join(' · ')}
+              </p>
+            )}
             <p className="match-line">
               {([0, 1, 2, 3] as Seat[])
                 .map((s) => `${nameOf(s)} ${view.matchScore[s]}`)

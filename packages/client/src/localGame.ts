@@ -1,5 +1,13 @@
 import { engines, makeRng, pickBotName } from '@icg/shared';
-import type { AnyGameEngine, GameAction, GameId, GameView, RoomState, SeatInfo } from '@icg/shared';
+import type {
+  AnyGameEngine,
+  GameAction,
+  GameEvent,
+  GameId,
+  GameView,
+  RoomState,
+  SeatInfo,
+} from '@icg/shared';
 
 /**
  * A complete game running entirely in the browser: you at seat 0 against
@@ -20,6 +28,7 @@ export class LocalGame {
     private readonly gameId: GameId,
     private readonly onView: (view: GameView) => void,
     players = 4,
+    private readonly onEvent: (event: GameEvent) => void = () => {},
   ) {
     this.engine = engines[gameId];
     this.players = Math.min(Math.max(players, this.engine.minSeats), this.engine.maxSeats);
@@ -56,7 +65,11 @@ export class LocalGame {
   }
 
   dispatch(action: GameAction): void {
-    this.state = this.engine.apply(this.state, action);
+    const prev = this.state;
+    this.state = this.engine.apply(prev, action);
+    for (const event of this.engine.deriveEvents(prev, this.state) as GameEvent[]) {
+      this.onEvent(event);
+    }
     this.emit();
     this.schedule();
   }

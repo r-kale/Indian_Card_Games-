@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../../core/cards';
 import { actingSeat, applyAction, initDeal, legalActions, minRaise } from './engine';
+import { deriveEvents } from './events';
 import { matchLeaders, matchWinners, scoreDeal } from './scoring';
 import { redactFor } from './view';
 import { IllegalActionError } from './types';
@@ -370,6 +371,9 @@ describe('scoring helpers', () => {
     s4 = throughBidding(s4);
     s4 = applyAction(s4, { type: 'declare', seat: 1, trumpSuit: 'H', partnerCard: s4.hands[3][0]! });
     expect(s4.marriages).toEqual([]);
+    // Showing emits a marriageShown event for the table pop-up.
+    const events = deriveEvents(s, shown);
+    expect(events).toContainEqual({ type: 'marriageShown', seat: 2, suit: 'D', hukum: false });
   });
 
   it('detects match winners at 5 points, and leaders for an early end', () => {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { cardKey, cardPoints, MATCH_TARGET, matchWinners } from '@icg/shared';
+import { cardKey, cardPoints, MATCH_TARGET, matchLeaders, matchWinners } from '@icg/shared';
 import type { Player304View, Seat, TrickPlay } from '@icg/shared';
 import { BidDialog } from '../components/BidDialog';
 import { DeclareDialog } from '../components/DeclareDialog';
+import { EndMatchButton } from '../components/EndMatchButton';
 import { CardFace } from '../components/CardFace';
 import { Hand } from '../components/Hand';
 import { HukumPanel } from '../components/HukumPanel';
@@ -46,7 +47,8 @@ export function Table() {
   const seatAt = (rel: 1 | 2 | 3): Seat => ((perspective + rel) % 4) as Seat;
   const myTurnToBid = view.phase === 'bidding' && mySeat !== null && view.bidding.turn === mySeat;
   const declaring = view.phase === 'declaring' && mySeat !== null && view.bid?.bidder === mySeat;
-  const winners = view.phase === 'matchOver' ? matchWinners(view.matchScore) : [];
+  const winners = view.phase === 'matchOver' ? matchLeaders(view.matchScore) : [];
+  const endedEarly = view.phase === 'matchOver' && matchWinners(view.matchScore).length === 0;
 
   return (
     <div className="table-screen">
@@ -129,6 +131,9 @@ export function Table() {
             </div>
           </div>
         )}
+        {isHost && mySeat !== null && view.phase !== 'matchOver' && (
+          <EndMatchButton onEnd={() => sendAction({ type: 'endMatch', seat: mySeat })} />
+        )}
         {isHost && (
           <button className="link" onClick={toLobby}>
             End game → lobby
@@ -178,7 +183,7 @@ export function Table() {
             <h3>Match over!</h3>
             <p className="match-line">
               {winners.map((s) => nameOf(s)).join(' & ')} win{winners.length === 1 ? 's' : ''} the
-              match!
+              match{endedEarly ? ' on the leading score' : ''}!
             </p>
             <p>
               {([0, 1, 2, 3] as Seat[])

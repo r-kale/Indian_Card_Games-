@@ -20,12 +20,11 @@ export function BidDialog({
 
   if (bidAction === undefined && passAction === undefined) return null;
   const high = view.bidding.highBid;
+  // Raises go up by +10 or +15 (bids land on multiples of 5), or straight to 304.
   const bump = (n: number) =>
     setAmount((a) => {
-      let next = a + n;
-      if (next > 300) next = n > 0 ? MAX_BID : 300;
-      if (a === MAX_BID && n < 0) next = 300;
-      return Math.min(MAX_BID, Math.max(min, next));
+      const next = a + n;
+      return next > 300 ? MAX_BID : Math.max(min, next);
     });
 
   return (
@@ -41,9 +40,14 @@ export function BidDialog({
           <div className="bid-controls">
             <div className="bid-amount">{amount}</div>
             <div className="bid-steppers">
-              <button onClick={() => bump(-10)}>−10</button>
               <button onClick={() => bump(10)}>+10</button>
+              <button onClick={() => bump(15)}>+15</button>
               <button onClick={() => setAmount(MAX_BID)}>304</button>
+              {amount > min && (
+                <button className="link" onClick={() => setAmount(min)}>
+                  ↺ {min}
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
 import { cardPoints } from '../../core/cards';
-import { matchWinners } from './scoring';
+import { matchLeaders } from './scoring';
 import type { GameEvent } from '../../protocol/events';
 import type { Game304State } from './types';
 
@@ -37,7 +37,7 @@ export function deriveEvents(prev: Game304State, next: Game304State): GameEvent[
     events.push({ type: 'dealScored', result: next.dealResult });
   }
   if (next.phase === 'matchOver' && prev.phase !== 'matchOver') {
-    events.push({ type: 'matchOver', winners: matchWinners(next.matchScore) });
+    events.push({ type: 'matchOver', winners: matchLeaders(next.matchScore) });
   }
   return events;
 }

@@ -128,8 +128,8 @@ input::placeholder {
 /* ---------- Home ---------- */
 
 .home {
-  max-width: 460px;
-  margin: 8vh auto;
+  max-width: 680px;
+  margin: 6vh auto;
   padding: 0 20px;
   display: flex;
   flex-direction: column;
@@ -1005,4 +1005,47 @@ input::placeholder {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto auto 1fr auto;
   }
+}
+
+/* ---- Landing page game cards ----------------------------------------- */
+
+.game-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.game-card {
+  background: #00000033;
+  border-radius: 12px;
+  border-top: 3px solid #eab30888;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.game-card-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.game-card-desc {
+  color: #cbd5e1;
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin: 0;
+  flex: 1;
+}
+.game-card-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.players-select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 13px;
 }

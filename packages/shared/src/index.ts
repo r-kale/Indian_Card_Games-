@@ -1,3 +1,4 @@
+export * from './core/botNames';
 export * from './core/cards';
 export * from './core/rng';
 export * from './core/tricks';

@@ -33,6 +33,17 @@ export function deriveEvents(prev: Game304State, next: Game304State): GameEvent[
       alliance: next.partner.status,
     });
   }
+  // Declaring the hukum reveals any marriages at the table.
+  if (prev.phase === 'declaring' && next.phase === 'playing') {
+    for (const m of next.marriages) {
+      events.push({
+        type: 'marriageShown',
+        seat: m.seat,
+        suit: m.suit,
+        hukum: m.suit === next.trumpSuit,
+      });
+    }
+  }
   if (prev.dealResult === null && next.dealResult !== null) {
     events.push({ type: 'dealScored', result: next.dealResult });
   }

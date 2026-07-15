@@ -21,6 +21,7 @@ export type GameEvent =
   | { type: 'sixCalled'; seat: Seat }
   | { type: 'hukumRevealed'; suit: Suit; caller: Seat }
   | { type: 'roundScored'; result: RoundResult }
+  | { type: 'marriageShown'; seat: Seat; suit: Suit; hukum: boolean }
   | { type: 'badamPassed'; seat: number }
   | { type: 'badamRoundScored'; result: BadamRoundResult };
 

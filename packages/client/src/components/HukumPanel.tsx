@@ -34,6 +34,18 @@ export function HukumPanel({ view, room }: { view: Player304View; room: RoomStat
           </span>
         </div>
       )}
+      {view.marriages.map((m) => (
+        <div className="hukum-row" key={`${m.seat}${m.suit}`}>
+          <span className="hukum-label">Marriage 💍</span>
+          <span className="partner-status">
+            {room.seats[m.seat]?.nickname ?? `Seat ${m.seat}`} — K+Q{' '}
+            <span className={m.suit === 'H' || m.suit === 'D' ? 'trump-suit red' : 'trump-suit'}>
+              {SUIT_GLYPH[m.suit]}
+            </span>{' '}
+            ({m.suit === view.trumpSuit ? '±40, hukum' : '±20'})
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

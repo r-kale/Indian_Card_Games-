@@ -42,6 +42,7 @@ export function redactFor(state: Game304State, seat: Seat | null): Player304View
     tricksTaken: state.tricksTaken,
     lastTrick: state.lastTrick,
     lastTrickWinner: state.lastTrickWinner,
+    marriages: state.marriages,
     dealResult: state.dealResult,
     matchScore: state.matchScore,
     legalActions: seat === null ? [] : legalActions(state, seat),

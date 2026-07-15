@@ -228,17 +228,20 @@ describe('playing', () => {
     expect(s.phase).toBe('dealOver');
     const total = s.capturedPoints.reduce((a, b) => a + b, 0);
     expect(total).toBe(304);
-    // Trick 7 (63 pts) went to bidder seat 1; trick 8 (0 pts) to seat 2.
-    // Bid team = seats 1 & 3: (90+63) + 51 = 204 >= 200 -> made it.
+    // Trick 7 (63 pts) went to bidder seat 1; the LAST trick (0 pts) to
+    // defender seat 2 — last-and-ten raises the target to 210.
+    // Bid team = seats 1 & 3: (90+63) + 51 = 204 < 210 -> failed by the last trick!
     expect(s.dealResult).toMatchObject({
       bidder: 1,
       partnerSeat: 3,
       alliance: 'allied',
       bidTeamPoints: 204,
-      madeIt: true,
-      deltas: [0, 1, 0, 1],
+      lastTrickShift: 10,
+      effectiveBid: 210,
+      madeIt: false,
+      deltas: [1, -1, 1, -1],
     });
-    expect(s.matchScore).toEqual([0, 1, 0, 1]);
+    expect(s.matchScore).toEqual([1, -1, 1, -1]);
   });
 });
 
@@ -251,6 +254,8 @@ describe('scoring helpers', () => {
       c('9', 'S'),
       'H',
       'allied',
+      [],
+      1, // bid side takes the last trick: target 200 - 10 = 190
     );
     expect(made.madeIt).toBe(true);
     expect(made.deltas).toEqual([0, 1, 0, 1]);
@@ -261,6 +266,8 @@ describe('scoring helpers', () => {
       c('9', 'S'),
       'H',
       'allied',
+      [],
+      0, // defenders take the last trick: target 200 + 10 = 210
     );
     expect(failed.madeIt).toBe(false);
     expect(failed.deltas).toEqual([1, -1, 1, -1]); // defenders +1, bid team -1 each
@@ -274,6 +281,8 @@ describe('scoring helpers', () => {
       c('9', 'S'),
       'H',
       'lone',
+      [],
+      1,
     );
     expect(made).toMatchObject({ bidTeamPoints: 210, madeIt: true, deltas: [0, 2, 0, 0] });
     const failed = scoreDeal(
@@ -283,8 +292,81 @@ describe('scoring helpers', () => {
       c('9', 'S'),
       'H',
       'lone',
+      [],
+      0,
     );
     expect(failed).toMatchObject({ bidTeamPoints: 190, madeIt: false, deltas: [1, -2, 1, 1] });
+  });
+
+  it('marriages and the last trick shift the bid target', () => {
+    // Bidder (1) holds the hukum marriage (-40); a defender (0) holds a plain
+    // one (+20); the defenders take the last trick (+10): 200 -40 +20 +10 = 190.
+    const r = scoreDeal(
+      [40, 150, 60, 45], // bid side (1+3) captured 195 >= 190: made only via shifts
+      { amount: 200, bidder: 1 },
+      3,
+      c('9', 'S'),
+      'H',
+      'allied',
+      [
+        { seat: 1, suit: 'H' },
+        { seat: 0, suit: 'S' },
+      ],
+      0,
+    );
+    expect(r.marriages).toEqual([
+      { seat: 1, suit: 'H', shift: -40 },
+      { seat: 0, suit: 'S', shift: 20 },
+    ]);
+    expect(r.lastTrickShift).toBe(10);
+    expect(r.effectiveBid).toBe(190);
+    expect(r.bidTeamPoints).toBe(195);
+    expect(r.madeIt).toBe(true);
+    // A lone bidder's ex-partner counts as a defender for the shifts.
+    const lone = scoreDeal(
+      [40, 190, 50, 24],
+      { amount: 200, bidder: 1 },
+      3,
+      c('9', 'S'),
+      'H',
+      'lone',
+      [{ seat: 3, suit: 'H' }], // ex-partner's hukum marriage now works AGAINST the bidder
+      3,
+    );
+    expect(lone.marriages).toEqual([{ seat: 3, suit: 'H', shift: 40 }]);
+    expect(lone.lastTrickShift).toBe(10);
+    expect(lone.effectiveBid).toBe(250);
+    expect(lone.madeIt).toBe(false);
+  });
+
+  it('detects marriages when the hukum is declared', () => {
+    let s = freshDeal();
+    s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
+    s = applyAction(s, { type: 'pass', seat: 2 });
+    s = applyAction(s, { type: 'pass', seat: 3 });
+    s = applyAction(s, { type: 'pass', seat: 0 });
+    // Plant a marriage: give seat 2 the K and Q of clubs.
+    const kq = [c('K', 'C'), c('Q', 'C')];
+    for (const card of kq) {
+      const holder = s.hands.findIndex((h) => h.some((x) => x.rank === card.rank && x.suit === card.suit));
+      const idx = s.hands[holder as Seat].findIndex((x) => x.rank === card.rank && x.suit === card.suit);
+      const swap = s.hands[2].find((x) => !kq.some((k) => k.rank === x.rank && k.suit === x.suit))!;
+      if (holder !== 2) {
+        s.hands[holder as Seat][idx] = swap;
+        s.hands[2][s.hands[2].indexOf(swap)] = card;
+      }
+    }
+    const notMine = ((): Card => {
+      for (const suit of ['S', 'H', 'D', 'C'] as const) {
+        for (const rank of ['J', '9', 'A', '10'] as const) {
+          const card = c(rank, suit);
+          if (!s.hands[1].some((x) => x.rank === rank && x.suit === suit)) return card;
+        }
+      }
+      throw new Error('unreachable');
+    })();
+    s = applyAction(s, { type: 'declare', seat: 1, trumpSuit: 'C', partnerCard: notMine });
+    expect(s.marriages).toContainEqual({ seat: 2, suit: 'C' });
   });
 
   it('detects match winners at 5 points, and leaders for an early end', () => {

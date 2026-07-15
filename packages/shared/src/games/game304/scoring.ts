@@ -1,13 +1,16 @@
 import type { Card, Suit } from '../../core/cards';
-import { MATCH_TARGET } from './types';
-import type { DealResult, Seat } from './types';
+import { LAST_TRICK_SHIFT, MARRIAGE_SHIFT, MARRIAGE_SHIFT_HUKUM, MATCH_TARGET } from './types';
+import type { DealResult, Marriage, Seat } from './types';
 
 /**
- * Score a finished deal. Allied: bidder + partner must capture at least the
- * bid; each player on the winning side gets +1 and losing the bid COSTS the
- * bid team a point each. Lone (the bidder lost the partner-card trick): the
- * bidder alone must capture the bid — +2 if made, −2 if not, while the other
- * three collect +1 each on a failure.
+ * Score a finished deal against the EFFECTIVE bid target:
+ * - each marriage (K+Q of a suit in one hand) shifts the bid by 20 — 40 for
+ *   the hukum suit — down when the bid side holds it, up when a defender does;
+ * - the last trick shifts the bid by 10 the same way.
+ * Allied: bidder + partner must capture the target; each player on the
+ * winning side gets +1 and losing costs the bid team a point each. Lone (the
+ * bidder lost the partner-card trick): the bidder alone must capture it —
+ * +2 if made, −2 if not, while the other three collect +1 each on a failure.
  */
 export function scoreDeal(
   capturedPoints: [number, number, number, number],
@@ -16,17 +19,30 @@ export function scoreDeal(
   partnerCard: Card,
   trumpSuit: Suit,
   alliance: 'allied' | 'lone',
+  marriages: Marriage[],
+  lastTrickWinner: Seat,
 ): DealResult {
+  const onBidSide = (seat: Seat) =>
+    seat === bid.bidder || (alliance === 'allied' && seat === partnerSeat);
+
+  const marriageShifts = marriages.map((m) => ({
+    ...m,
+    shift:
+      (m.suit === trumpSuit ? MARRIAGE_SHIFT_HUKUM : MARRIAGE_SHIFT) *
+      (onBidSide(m.seat) ? -1 : 1),
+  }));
+  const lastTrickShift = onBidSide(lastTrickWinner) ? -LAST_TRICK_SHIFT : LAST_TRICK_SHIFT;
+  const effectiveBid =
+    bid.amount + marriageShifts.reduce((a, m) => a + m.shift, 0) + lastTrickShift;
+
   const bidTeamPoints =
     alliance === 'allied'
       ? capturedPoints[bid.bidder] + capturedPoints[partnerSeat]
       : capturedPoints[bid.bidder];
-  const madeIt = bidTeamPoints >= bid.amount;
+  const madeIt = bidTeamPoints >= effectiveBid;
   const deltas: DealResult['deltas'] = [0, 0, 0, 0];
   for (let seat = 0; seat < 4; seat++) {
-    const onBidTeam =
-      seat === bid.bidder || (alliance === 'allied' && seat === partnerSeat);
-    if (onBidTeam) {
+    if (onBidSide(seat as Seat)) {
       const magnitude = alliance === 'lone' ? 2 : 1;
       deltas[seat] = madeIt ? magnitude : -magnitude;
     } else if (!madeIt) {
@@ -41,6 +57,9 @@ export function scoreDeal(
     trumpSuit,
     alliance,
     bidTeamPoints,
+    marriages: marriageShifts,
+    lastTrickShift,
+    effectiveBid,
     madeIt,
     deltas,
   };

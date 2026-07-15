@@ -416,9 +416,14 @@ function describeEvent(event: GameEvent, nameOf: (seat: number) => string): stri
         : `💥 Partner trick lost — the bidder now plays alone vs 3!`;
     case 'dealScored': {
       const r = event.result;
+      if (r.alliance === 'lone') {
+        return r.madeIt
+          ? `Bid of ${r.bid} made alone — ${nameOf(r.bidder)} scores +2!`
+          : `Bid of ${r.bid} failed alone — ${nameOf(r.bidder)} drops 2 points`;
+      }
       return r.madeIt
         ? `Bid of ${r.bid} made — ${nameOf(r.bidder)} & ${nameOf(r.partnerSeat)} score +1`
-        : `Bid of ${r.bid} failed — the defenders score +1`;
+        : `Bid of ${r.bid} failed — ${nameOf(r.bidder)} & ${nameOf(r.partnerSeat)} drop a point`;
     }
     case 'vakhaaiCalled':
       return `\u{1F0CF} Vakhaai! ${nameOf(event.seat)} bets ${event.bet} kalyas on 4 hands alone`;

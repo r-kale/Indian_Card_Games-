@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { cardKey, cardPoints, MATCH_TARGET, matchLeaders, matchWinners } from '@icg/shared';
-import type { Action304, Player304View, Seat, TrickPlay } from '@icg/shared';
+import { useEffect, useRef, useState } from 'react';
+import { cardKey, cardPoints, MATCH_TARGET, matchLeaders, matchWinners, SUIT_NAMES } from '@icg/shared';
+import type { Action304, Player304View, Seat, Suit, TrickPlay } from '@icg/shared';
 import { BidDialog } from '../components/BidDialog';
 import { DeclareDialog } from '../components/DeclareDialog';
 import { EndMatchButton } from '../components/EndMatchButton';
@@ -23,6 +23,24 @@ export function Table() {
   const mySeat = view.seat;
   const perspective: Seat = mySeat ?? 0;
   const nameOf = (seat: Seat) => room.seats[seat]?.nickname ?? `Seat ${seat}`;
+
+  // Flash a shown marriage over the play area so nobody misses it.
+  const [marriageFlash, setMarriageFlash] = useState<{ seat: Seat; suit: Suit } | null>(null);
+  const seenMarriages = useRef(0);
+  useEffect(() => {
+    if (view.marriages.length > seenMarriages.current) {
+      const m = view.marriages[view.marriages.length - 1]!;
+      seenMarriages.current = view.marriages.length;
+      setMarriageFlash(m);
+      const t = setTimeout(() => setMarriageFlash(null), 3000);
+      return () => clearTimeout(t);
+    }
+    if (view.marriages.length < seenMarriages.current) {
+      seenMarriages.current = view.marriages.length; // a new deal reset the list
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.marriages.length]);
 
   // Let a completed trick linger in the middle before it is swept away.
   const [linger, setLinger] = useState<{ trick: TrickPlay[]; winner: Seat } | null>(null);
@@ -73,6 +91,16 @@ export function Table() {
           <div className="trick-note">
             {nameOf(linger.winner)} takes the trick (+
             {linger.trick.reduce((s, p) => s + cardPoints(p.card), 0)} pts)
+          </div>
+        )}
+        {marriageFlash !== null && (
+          <div className="hukum-flash">
+            <div className="hukum-flash-suit">💍</div>
+            <div className="hukum-flash-text">
+              {nameOf(marriageFlash.seat)} shows a marriage — K+Q of{' '}
+              {SUIT_NAMES[marriageFlash.suit]}{' '}
+              {marriageFlash.suit === view.trumpSuit ? '(hukum — bid shifts 40!)' : '(bid shifts 20)'}
+            </div>
           </div>
         )}
       </div>

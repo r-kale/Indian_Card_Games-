@@ -315,6 +315,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         gameId,
         (view) => dispatch({ type: 'view', view }),
         players,
+        notifyEvent,
       );
       localGame.current?.destroy();
       localGame.current = game;

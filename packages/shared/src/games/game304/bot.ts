@@ -18,8 +18,12 @@ export function chooseAction(view: Player304View, rng: Rng): Action304 {
       return chooseBid(view, actions);
     case 'declaring':
       return chooseDeclaration(view);
-    case 'playing':
+    case 'playing': {
+      // Showing a marriage always helps our side — do it the moment we can.
+      const marriage = actions.find((a) => a.type === 'showMarriage');
+      if (marriage !== undefined) return marriage;
       return choosePlay(view, actions, rng);
+    }
     case 'dealOver':
       return actions[0]!;
     case 'matchOver':

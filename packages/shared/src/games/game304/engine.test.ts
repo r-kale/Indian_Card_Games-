@@ -339,34 +339,37 @@ describe('scoring helpers', () => {
     expect(lone.madeIt).toBe(false);
   });
 
-  it('detects marriages when the hukum is declared', () => {
-    let s = freshDeal();
-    s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
-    s = applyAction(s, { type: 'pass', seat: 2 });
-    s = applyAction(s, { type: 'pass', seat: 3 });
-    s = applyAction(s, { type: 'pass', seat: 0 });
-    // Plant a marriage: give seat 2 the K and Q of clubs.
-    const kq = [c('K', 'C'), c('Q', 'C')];
-    for (const card of kq) {
-      const holder = s.hands.findIndex((h) => h.some((x) => x.rank === card.rank && x.suit === card.suit));
-      const idx = s.hands[holder as Seat].findIndex((x) => x.rank === card.rank && x.suit === card.suit);
-      const swap = s.hands[2].find((x) => !kq.some((k) => k.rank === x.rank && k.suit === x.suit))!;
-      if (holder !== 2) {
-        s.hands[holder as Seat][idx] = swap;
-        s.hands[2][s.hands[2].indexOf(swap)] = card;
-      }
-    }
-    const notMine = ((): Card => {
-      for (const suit of ['S', 'H', 'D', 'C'] as const) {
-        for (const rank of ['J', '9', 'A', '10'] as const) {
-          const card = c(rank, suit);
-          if (!s.hands[1].some((x) => x.rank === rank && x.suit === suit)) return card;
-        }
-      }
-      throw new Error('unreachable');
-    })();
-    s = applyAction(s, { type: 'declare', seat: 1, trumpSuit: 'C', partnerCard: notMine });
-    expect(s.marriages).toContainEqual({ seat: 2, suit: 'C' });
+  it('a marriage must be SHOWN: side has won a hand, K+Q still in hand', () => {
+    // Seat 2 has taken a trick and holds K+Q of diamonds: eligible any time,
+    // even though it is not their turn.
+    const s = endgame();
+    s.hands[2] = [c('K', 'D'), c('Q', 'D')];
+    expect(
+      legalActions(s, 2 as Seat).some((a) => a.type === 'showMarriage' && a.suit === 'D'),
+    ).toBe(true);
+    const shown = applyAction(s, { type: 'showMarriage', seat: 2, suit: 'D' });
+    expect(shown.marriages).toEqual([{ seat: 2, suit: 'D' }]);
+    expect(shown.turn).toBe(1); // a free action: the turn does not move
+    expect(() => applyAction(shown, { type: 'showMarriage', seat: 2, suit: 'D' })).toThrow(
+      IllegalActionError, // only once
+    );
+    // No trick won (and the partnership not yet revealed): not eligible.
+    const s2 = endgame();
+    s2.hands[0] = [c('K', 'D'), c('Q', 'D')];
+    s2.tricksTaken = [0, 3, 2, 1];
+    expect(legalActions(s2, 0 as Seat).some((a) => a.type === 'showMarriage')).toBe(false);
+    expect(() => applyAction(s2, { type: 'showMarriage', seat: 0, suit: 'D' })).toThrow(
+      IllegalActionError,
+    );
+    // Half the pair already played: the marriage is forfeit.
+    const s3 = endgame();
+    s3.hands[2] = [c('K', 'D'), c('8', 'H')];
+    expect(legalActions(s3, 2 as Seat).some((a) => a.type === 'showMarriage')).toBe(false);
+    // Nothing is auto-detected at declare time.
+    let s4 = freshDeal();
+    s4 = throughBidding(s4);
+    s4 = applyAction(s4, { type: 'declare', seat: 1, trumpSuit: 'H', partnerCard: s4.hands[3][0]! });
+    expect(s4.marriages).toEqual([]);
   });
 
   it('detects match winners at 5 points, and leaders for an early end', () => {

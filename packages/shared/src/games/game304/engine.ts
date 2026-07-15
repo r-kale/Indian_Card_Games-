@@ -103,7 +103,11 @@ export function legalActions(state: Game304State, seat: Seat): Action304[] {
       return [{ type: 'declare', seat, trumpSuit: sample.suit, partnerCard: sample }];
     }
     case 'playing': {
-      if (state.turn !== seat) return [];
+      // Showing a marriage is a free action, open whenever the seat qualifies.
+      for (const suit of showableMarriages(state, seat)) {
+        actions.push({ type: 'showMarriage', seat, suit });
+      }
+      if (state.turn !== seat) return actions;
       for (const card of legalPlays(state, seat)) actions.push({ type: 'playCard', seat, card });
       return actions;
     }
@@ -166,6 +170,9 @@ export function applyAction(state: Game304State, action: Action304): Game304Stat
       break;
     case 'playCard':
       applyPlayCard(s, action.seat, action.card);
+      break;
+    case 'showMarriage':
+      applyShowMarriage(s, action.seat, action.suit);
       break;
     case 'nextDeal':
       return applyNextDeal(s);
@@ -240,25 +247,59 @@ function applyDeclare(s: Game304State, seat: Seat, trumpSuit: Suit, partnerCard:
   if (partnerSeat === null) fail('no such card in play');
   s.trumpSuit = trumpSuit;
   s.partner = { card: partnerCard, seat: partnerSeat, status: 'hidden' };
-  // Marriages (K+Q of one suit in one hand) are shown to the table now that
-  // the hukum is known; they shift the bid target when the deal is scored.
-  s.marriages = detectMarriages(s.hands);
   s.phase = 'playing';
   // The bid winner leads the first trick.
   s.turn = seat;
   s.trickLeader = seat;
 }
 
-function detectMarriages(hands: Game304State['hands']): Game304State['marriages'] {
-  const marriages: Game304State['marriages'] = [];
-  for (let seat = 0; seat < 4; seat++) {
-    for (const suit of SUITS) {
-      const has = (rank: Card['rank']) =>
-        hands[seat as Seat].some((c) => c.rank === rank && c.suit === suit);
-      if (has('K') && has('Q')) marriages.push({ seat: seat as Seat, suit });
-    }
+/**
+ * Suits whose marriage (K+Q still in hand) this seat may show right now:
+ * their side must have won a hand already, and each pair shows only once.
+ */
+export function showableMarriages(state: Game304State, seat: Seat): Suit[] {
+  if (state.phase !== 'playing' || !sideHasWonTrick(state, seat)) return [];
+  const suits: Suit[] = [];
+  for (const suit of SUITS) {
+    if (state.marriages.some((m) => m.seat === seat && m.suit === suit)) continue;
+    const has = (rank: Card['rank']) =>
+      state.hands[seat].some((c) => c.rank === rank && c.suit === suit);
+    if (has('K') && has('Q')) suits.push(suit);
   }
-  return marriages;
+  return suits;
+}
+
+/**
+ * Has this seat's side taken a hand yet? Before the partner reveal only your
+ * own tricks count (nobody knows the sides for sure); once the alliance is
+ * decided, your whole side's tricks qualify.
+ */
+function sideHasWonTrick(s: Game304State, seat: Seat): boolean {
+  if (s.tricksTaken[seat] > 0) return true;
+  const partner = s.partner;
+  const bid = s.bid;
+  if (partner === null || bid === null) return false;
+  if (partner.status === 'allied') {
+    const bidSide = [bid.bidder, partner.seat];
+    const mySide = bidSide.includes(seat)
+      ? bidSide
+      : ([0, 1, 2, 3] as Seat[]).filter((x) => !bidSide.includes(x));
+    return mySide.some((t) => s.tricksTaken[t] > 0);
+  }
+  if (partner.status === 'lone') {
+    if (seat === bid.bidder) return false; // own tricks already checked
+    const three = ([0, 1, 2, 3] as Seat[]).filter((x) => x !== bid.bidder);
+    return three.some((t) => s.tricksTaken[t] > 0);
+  }
+  return false;
+}
+
+function applyShowMarriage(s: Game304State, seat: Seat, suit: Suit): void {
+  if (s.phase !== 'playing') fail('marriages are shown during play');
+  if (!showableMarriages(s, seat).includes(suit)) {
+    fail('to show a marriage your side must have won a hand and the K+Q must still be in your hand');
+  }
+  s.marriages.push({ seat, suit });
 }
 
 function applyPlayCard(s: Game304State, seat: Seat, card: Card): void {

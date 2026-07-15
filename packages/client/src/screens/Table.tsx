@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cardKey, cardPoints, MATCH_TARGET, matchLeaders, matchWinners } from '@icg/shared';
-import type { Player304View, Seat, TrickPlay } from '@icg/shared';
+import type { Action304, Player304View, Seat, TrickPlay } from '@icg/shared';
 import { BidDialog } from '../components/BidDialog';
 import { DeclareDialog } from '../components/DeclareDialog';
 import { EndMatchButton } from '../components/EndMatchButton';
@@ -84,6 +84,21 @@ export function Table() {
         {mySeat !== null ? (
           <>
             <SeatBadge seat={mySeat} room={room} view={view} active={actor === mySeat} />
+            {view.legalActions
+              .filter(
+                (a): a is Extract<Action304, { type: 'showMarriage' }> =>
+                  a.type === 'showMarriage',
+              )
+              .map((a) => (
+                <button
+                  key={a.suit}
+                  className="reveal-btn"
+                  onClick={() => sendAction(a)}
+                >
+                  💍 Show marriage — K+Q {{ S: '♠', H: '♥', D: '♦', C: '♣' }[a.suit]}
+                  {a.suit === view.trumpSuit ? ' (hukum, ±40)' : ' (±20)'}
+                </button>
+              ))}
             <Hand
               cards={view.hand}
               playable={

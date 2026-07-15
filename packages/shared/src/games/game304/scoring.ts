@@ -4,13 +4,13 @@ import type { DealResult, Marriage, Seat } from './types';
 
 /**
  * Score a finished deal against the EFFECTIVE bid target:
- * - each marriage (K+Q of a suit in one hand) shifts the bid by 20 — 40 for
- *   the hukum suit — down when the bid side holds it, up when a defender does;
+ * - each SHOWN marriage (K+Q of a suit in one hand) shifts the bid by 20 —
+ *   40 for the hukum suit — down when the bid side holds it, up otherwise;
  * - the last trick shifts the bid by 10 the same way.
- * Allied: bidder + partner must capture the target; each player on the
- * winning side gets +1 and losing costs the bid team a point each. Lone (the
- * bidder lost the partner-card trick): the bidder alone must capture it —
- * +2 if made, −2 if not, while the other three collect +1 each on a failure.
+ * Only the bid side's match score ever moves: bidder and allied partner get
+ * +1 each for a made bid and −1 each for a failed one; a lone bidder (the
+ * partner trick was lost) swings ±2 alone. Everyone else scores nothing —
+ * the only way to gain points is to win bids (or ally with the winner).
  */
 export function scoreDeal(
   capturedPoints: [number, number, number, number],
@@ -45,8 +45,6 @@ export function scoreDeal(
     if (onBidSide(seat as Seat)) {
       const magnitude = alliance === 'lone' ? 2 : 1;
       deltas[seat] = madeIt ? magnitude : -magnitude;
-    } else if (!madeIt) {
-      deltas[seat] = 1;
     }
   }
   return {

@@ -193,7 +193,7 @@ describe('playing', () => {
       alliance: 'lone',
       bidTeamPoints: 90,
       madeIt: false,
-      deltas: [1, -2, 1, 1], // ex-partner wins with the three; the lone bidder pays -2
+      deltas: [0, -2, 0, 0], // only the lone bidder's score moves: -2
     });
   });
 
@@ -240,14 +240,14 @@ describe('playing', () => {
       lastTrickShift: 10,
       effectiveBid: 210,
       madeIt: false,
-      deltas: [1, -1, 1, -1],
+      deltas: [0, -1, 0, -1],
     });
-    expect(s.matchScore).toEqual([1, -1, 1, -1]);
+    expect(s.matchScore).toEqual([0, -1, 0, -1]);
   });
 });
 
 describe('scoring helpers', () => {
-  it('awards +1 to each winner when allied; a lost bid costs the bid team', () => {
+  it('allied: bid team swings +1/-1 each; defenders never score', () => {
     const made = scoreDeal(
       [50, 150, 40, 64],
       { amount: 200, bidder: 1 },
@@ -271,10 +271,10 @@ describe('scoring helpers', () => {
       0, // defenders take the last trick: target 200 + 10 = 210
     );
     expect(failed.madeIt).toBe(false);
-    expect(failed.deltas).toEqual([1, -1, 1, -1]); // defenders +1, bid team -1 each
+    expect(failed.deltas).toEqual([0, -1, 0, -1]); // only the bid team moves
   });
 
-  it('pays a lone bidder +2 made / -2 failed, with +1 to each of the other three', () => {
+  it('lone: the bidder alone swings +2/-2; nobody else scores', () => {
     const made = scoreDeal(
       [40, 210, 30, 24],
       { amount: 200, bidder: 1 },
@@ -296,7 +296,7 @@ describe('scoring helpers', () => {
       [],
       0,
     );
-    expect(failed).toMatchObject({ bidTeamPoints: 190, madeIt: false, deltas: [1, -2, 1, 1] });
+    expect(failed).toMatchObject({ bidTeamPoints: 190, madeIt: false, deltas: [0, -2, 0, 0] });
   });
 
   it('marriages and the last trick shift the bid target', () => {

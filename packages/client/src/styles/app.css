@@ -633,8 +633,11 @@ input::placeholder {
 
 .hand {
   display: flex;
+  flex-wrap: wrap; /* big Badam hands spill onto a second row instead of off-screen */
   justify-content: center;
+  row-gap: 8px;
   padding: 6px 20px 12px;
+  max-width: 100%;
 }
 .hand .card {
   margin-left: -18px;
@@ -938,6 +941,30 @@ input::placeholder {
 }
 .layout-chip.seven {
   outline: 2px solid #eab308;
+}
+.layout-chip.just-played {
+  outline: 3px solid #38bdf8;
+  animation: chip-pop 0.9s ease-out;
+}
+@keyframes chip-pop {
+  0% {
+    transform: scale(1.7);
+    box-shadow: 0 0 18px #38bdf8cc;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.badam-ticker {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: #00000033;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  min-height: 20px;
 }
 .badam-badge {
   min-width: 130px;

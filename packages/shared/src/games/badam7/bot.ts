@@ -41,5 +41,8 @@ function playScore(view: BadamView, card: Card): number {
     unlocked = own.filter((c) => RANK_VALUE[c.rank] < v).length;
   }
   const deadEnd = v === 1 || v === 13 ? 1 : 0; // A/K give nothing away
-  return unlocked * 2 + deadEnd;
+  // Cards far from the 7 are the ones that get stuck — and with value-based
+  // scoring the high ones are the expensive liabilities. Shed them early.
+  const liability = Math.abs(v - 7) * 0.15;
+  return unlocked * 2 + deadEnd + liability;
 }

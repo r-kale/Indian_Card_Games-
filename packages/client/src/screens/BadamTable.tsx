@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { badamMatchWinners, cardKey, rankAtValue } from '@icg/shared';
+import { badamMatchWinners, cardKey, rankAtValue, RANK_VALUE } from '@icg/shared';
 import type { BadamAction, BadamView, RoomState, SuitLayout } from '@icg/shared';
 import { Hand } from '../components/Hand';
 import { useStore } from '../store';
@@ -37,8 +37,15 @@ export function BadamTable() {
       </div>
 
       <div className="badam-board">
+        <div className="badam-ticker">
+          {view.lastMove === null
+            ? `Waiting for the 7\u2665 \u2014 ${view.turn !== null ? nameOf(view.turn) : '\u2026'} starts (right of ${nameOf(view.dealer)})`
+            : view.lastMove.card === null
+              ? `${nameOf(view.lastMove.seat)} passed`
+              : `${nameOf(view.lastMove.seat)} played ${view.lastMove.card.rank}${SUIT_GLYPH[view.lastMove.card.suit]}`}
+        </div>
         {SUIT_ORDER.map((suit) => (
-          <SuitRow key={suit} suit={suit} row={view.layout[suit]} />
+          <SuitRow key={suit} suit={suit} row={view.layout[suit]} lastMove={view.lastMove} />
         ))}
       </div>
 
@@ -87,12 +94,16 @@ export function BadamTable() {
         <div className="dialog-backdrop">
           <div className="dialog">
             <h3>{nameOf(view.roundResult.winner)} is out of cards!</h3>
-            <p>Everyone else adds their leftover cards to their score:</p>
+            <p>Everyone else adds the value of their leftover cards (A=1 … K=13):</p>
             <div className="badam-standings">
-              {view.roundResult.cardsLeft.map((left, seat) => (
+              {view.roundResult.pointsLeft.map((pts, seat) => (
                 <div key={seat} className="score-row player">
                   <span className="player-name">{nameOf(seat)}</span>
-                  <span className="points">{left > 0 ? `+${left}` : 'winner 🎉'}</span>
+                  <span className="points">
+                    {pts > 0
+                      ? `+${pts} (${view.roundResult!.cardsLeft[seat]} cards)`
+                      : 'winner 🎉'}
+                  </span>
                   <span className="match">{view.roundResult!.totalsAfter[seat]} total</span>
                 </div>
               ))}
@@ -125,7 +136,7 @@ export function BadamTable() {
               {badamMatchWinners(view.totals)
                 .map((s) => nameOf(s))
                 .join(' & ')}{' '}
-              win with the fewest cards conceded.
+              win with the lowest score.
             </p>
             <div className="badam-standings">
               {[...view.totals.keys()]
@@ -152,8 +163,20 @@ export function BadamTable() {
 }
 
 /** One suit's run on the table: chips from the low end to the high end. */
-function SuitRow({ suit, row }: { suit: keyof typeof SUIT_GLYPH; row: SuitLayout }) {
+function SuitRow({
+  suit,
+  row,
+  lastMove,
+}: {
+  suit: keyof typeof SUIT_GLYPH;
+  row: SuitLayout;
+  lastMove: BadamView['lastMove'];
+}) {
   const red = suit === 'H' || suit === 'D';
+  const justPlayed =
+    lastMove?.card != null && lastMove.card.suit === suit
+      ? RANK_VALUE[lastMove.card.rank]
+      : null;
   return (
     <div className="suit-row-board">
       <span className={`suit-row-glyph ${red ? 'red' : ''}`}>{SUIT_GLYPH[suit]}</span>
@@ -162,7 +185,12 @@ function SuitRow({ suit, row }: { suit: keyof typeof SUIT_GLYPH; row: SuitLayout
       ) : (
         <div className="suit-row-chips">
           {Array.from({ length: row.high - row.low + 1 }, (_, i) => row.low! + i).map((v) => (
-            <span key={v} className={`layout-chip ${red ? 'red' : ''} ${v === 7 ? 'seven' : ''}`}>
+            <span
+              key={v}
+              className={`layout-chip ${red ? 'red' : ''} ${v === 7 ? 'seven' : ''} ${
+                v === justPlayed ? 'just-played' : ''
+              }`}
+            >
               {rankAtValue(v)}
             </span>
           ))}
@@ -195,7 +223,7 @@ function BadamSeatBadge({
         {seat === view.seat ? ' (you)' : ''}
       </div>
       <div className="seat-badge-tags">
-        {view.dealer === seat && <span className="tag">dealer</span>}
+        {view.dealer === seat && <span className="tag">shuffled</span>}
         {passed && <span className="tag warn">passed</span>}
         {offline && <span className="tag warn">offline</span>}
         <span className="tag hands">{view.handCounts[seat]} cards</span>
@@ -222,7 +250,9 @@ function BadamScorePanel({ view, nameOf }: { view: BadamView; nameOf: (seat: num
           <span className="match">{view.totals[seat]} pts</span>
         </div>
       ))}
-      <p className="score-hint">Leftover cards count against you — lowest total wins.</p>
+      <p className="score-hint">
+        The value of leftover cards (A=1 … K=13) counts against you — lowest total wins.
+      </p>
     </div>
   );
 }

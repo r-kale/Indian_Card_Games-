@@ -20,9 +20,10 @@ const EMPTY_LAYOUT = (): Record<Suit, SuitLayout> => ({
 });
 
 /**
- * Deal the whole pack round-robin from the dealer's left (hands may differ by
- * one card when 52 doesn't divide evenly). The 7♥ holder is on the clock and
- * must open with it.
+ * Deal the whole pack round-robin from the shuffler's right (hands may differ
+ * by one card when 52 doesn't divide evenly). Play starts right of the
+ * shuffler too: seats without a legal move pass until the 7♥ holder's turn
+ * comes — they must open with it.
  */
 export function initRound(config: BadamRoundConfig): BadamState {
   const { players } = config;
@@ -33,7 +34,6 @@ export function initRound(config: BadamRoundConfig): BadamState {
   const deck = shuffle(buildDeck52(), rng);
   const hands: Card[][] = Array.from({ length: players }, () => []);
   deck.forEach((card, i) => hands[(config.dealer + 1 + i) % players]!.push(card));
-  const opener = hands.findIndex((h) => h.some((c) => c.rank === '7' && c.suit === 'H'));
   return {
     phase: 'playing',
     players,
@@ -41,12 +41,17 @@ export function initRound(config: BadamRoundConfig): BadamState {
     dealer: config.dealer,
     hands,
     layout: EMPTY_LAYOUT(),
-    turn: opener,
+    turn: nextSeat(config.dealer, players),
     lastMove: null,
     totals: [...config.totals],
     roundResult: null,
     seed: config.seed,
   };
+}
+
+/** A random first shuffler, derived from the match seed. */
+export function randomDealer(seed: string, players: number): number {
+  return Math.floor(makeRng(`${seed}/dealer1`)() * players);
 }
 
 export function actingSeat(state: BadamState): number | null {
@@ -133,11 +138,13 @@ function applyPlayCard(s: BadamState, seat: number, card: Card): void {
   s.lastMove = { seat, card };
 
   if (hand.length === 0) {
-    // First one out wins; everyone else eats their remaining cards.
+    // First one out wins; everyone else eats the VALUE of their remaining
+    // cards (A=1 … K=13 — a stuck King hurts more than a stuck two).
     const cardsLeft = s.hands.map((h) => h.length);
-    const totalsAfter = s.totals.map((t, i) => t + cardsLeft[i]!);
+    const pointsLeft = s.hands.map((h) => h.reduce((a, c) => a + RANK_VALUE[c.rank], 0));
+    const totalsAfter = s.totals.map((t, i) => t + pointsLeft[i]!);
     s.totals = totalsAfter;
-    s.roundResult = { winner: seat, cardsLeft, totalsAfter };
+    s.roundResult = { winner: seat, cardsLeft, pointsLeft, totalsAfter };
     s.phase = 'roundOver';
     s.turn = null;
     return;
@@ -155,11 +162,25 @@ function applyPass(s: BadamState, seat: number): void {
   s.turn = nextSeat(seat, s.players);
 }
 
+/**
+ * The round's biggest loser shuffles next: highest score this round, ties
+ * broken by the higher running total, then randomly (seeded).
+ */
 function applyNextRound(s: BadamState): BadamState {
   if (s.phase !== 'roundOver') fail('the round is not over');
+  const r = s.roundResult!;
+  const seats = [...r.pointsLeft.keys()];
+  const maxRound = Math.max(...r.pointsLeft);
+  let candidates = seats.filter((i) => r.pointsLeft[i] === maxRound);
+  if (candidates.length > 1) {
+    const maxTotal = Math.max(...candidates.map((i) => r.totalsAfter[i]!));
+    candidates = candidates.filter((i) => r.totalsAfter[i] === maxTotal);
+  }
+  const rng = makeRng(`${s.seed}/dealer${s.roundNumber + 1}`);
+  const dealer = candidates[Math.floor(rng() * candidates.length)]!;
   return initRound({
     players: s.players,
-    dealer: nextSeat(s.dealer, s.players),
+    dealer,
     totals: s.totals,
     seed: s.seed,
     roundNumber: s.roundNumber + 1,

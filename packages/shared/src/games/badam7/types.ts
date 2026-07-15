@@ -17,8 +17,10 @@ export interface SuitLayout {
 
 export interface BadamRoundResult {
   winner: number;
-  /** Cards each player was left holding — the penalty added this round. */
+  /** How many cards each player was left holding. */
   cardsLeft: number[];
+  /** Their value (A=1 … K=13) summed — the score added this round. */
+  pointsLeft: number[];
   totalsAfter: number[];
 }
 
@@ -33,7 +35,7 @@ export interface BadamState {
   turn: number | null;
   /** Most recent move, for UI cues; card null = the seat passed. */
   lastMove: { seat: number; card: Card | null } | null;
-  /** Cumulative penalty points (cards left when someone went out). */
+  /** Cumulative penalty points (value of cards left when someone went out). */
   totals: number[];
   roundResult: BadamRoundResult | null;
   seed: string;

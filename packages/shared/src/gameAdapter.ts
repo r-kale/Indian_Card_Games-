@@ -24,6 +24,7 @@ import {
   applyAction as applyBadam,
   initRound as initBadamRound,
   legalActions as legalBadam,
+  randomDealer as randomBadamDealer,
 } from './games/badam7/engine';
 import { chooseAction as botBadamChoose } from './games/badam7/bot';
 import { deriveEvents as eventsBadam } from './games/badam7/events';
@@ -107,7 +108,7 @@ export const badam7Engine: GameEngine<BadamState, BadamAction, BadamView> = {
   init: ({ seed, players }) =>
     initBadamRound({
       players: players ?? 4,
-      dealer: 0,
+      dealer: randomBadamDealer(seed, players ?? 4),
       totals: Array.from({ length: players ?? 4 }, () => 0),
       seed,
       roundNumber: 1,

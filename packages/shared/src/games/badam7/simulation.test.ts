@@ -27,11 +27,15 @@ describe('badam 7 bot simulation', () => {
           if (++steps > 20000) throw new Error('simulation did not terminate');
           const seat = actingSeat(state);
           if (seat === null) {
-            // Round over: cards conserved, winner really went out.
+            // Round over: cards conserved, winner really went out, and the
+            // penalties are the value of what everyone is still holding.
             const r = state.roundResult!;
             expect(state.hands[r.winner]).toHaveLength(0);
             expect(r.cardsLeft.reduce((a, b) => a + b, 0)).toBe(
               state.hands.reduce((a, h) => a + h.length, 0),
+            );
+            expect(r.pointsLeft.reduce((a, b) => a + b, 0)).toBe(
+              state.hands.reduce((a, h) => a + h.reduce((x, c) => x + RANK_VALUE[c.rank], 0), 0),
             );
             const done = state.roundNumber >= 5;
             state = applyAction(state, { type: done ? 'endMatch' : 'nextRound', seat: 0 });
@@ -56,9 +60,12 @@ describe('badam 7 bot simulation', () => {
           expect(view.hand.length).toBe(state.hands[seat]!.length);
           const action = chooseAction(view, rng);
           if (action.type === 'pass') {
-            // Bots only pass when genuinely stuck.
+            // Bots only pass when genuinely stuck. Before any card falls,
+            // only the 7 of Hearts itself is playable.
+            const nothingOpened = Object.values(state.layout).every((r) => r.low === null);
             expect(
               state.hands[seat]!.every((c) => {
+                if (nothingOpened) return !(c.rank === '7' && c.suit === 'H');
                 const row = state.layout[c.suit];
                 if (row.low === null || row.high === null) return RANK_VALUE[c.rank] !== 7;
                 const v = RANK_VALUE[c.rank];

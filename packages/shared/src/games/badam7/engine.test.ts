@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../../core/cards';
-import { actingSeat, applyAction, initRound, isPlayable, legalActions } from './engine';
+import {
+  actingSeat,
+  applyAction,
+  initRound,
+  isPlayable,
+  legalActions,
+  randomDealer,
+} from './engine';
 import { BadamError, matchWinners } from './types';
 import type { BadamState } from './types';
 import { redactFor } from './view';
@@ -45,20 +52,32 @@ describe('dealing', () => {
     expect(() => fresh(9)).toThrow(BadamError);
   });
 
-  it('puts the 7 of Hearts holder on the clock', () => {
+  it('play starts right of the shuffler, and a random seat shuffles first', () => {
     const s = fresh();
-    const holder = s.hands.findIndex((h) => h.some((x) => x.rank === '7' && x.suit === 'H'));
-    expect(actingSeat(s)).toBe(holder);
+    expect(actingSeat(s)).toBe(1); // right of dealer 0
+    expect(randomDealer('seed-a', 4)).toBeGreaterThanOrEqual(0);
+    expect(randomDealer('seed-a', 4)).toBeLessThan(4);
+    expect(randomDealer('seed-a', 4)).toBe(randomDealer('seed-a', 4)); // seeded
   });
 });
 
 describe('legality', () => {
-  it('the very first card of a round must be the 7 of Hearts', () => {
-    const s = fresh();
-    const opener = s.turn!;
-    const legal = legalActions(s, opener);
-    expect(legal).toEqual([{ type: 'playCard', seat: opener, card: c('7', 'H') }]);
-    expect(isPlayable(s, c('7', 'S'))).toBe(false);
+  it('the very first card of a round must be the 7 of Hearts; earlier seats pass', () => {
+    let s = fresh();
+    // Walk from the dealer's right: seats without the 7♥ can only pass.
+    for (let i = 0; i < 4; i++) {
+      const seat = s.turn!;
+      const holds7H = s.hands[seat]!.some((x) => x.rank === '7' && x.suit === 'H');
+      const legal = legalActions(s, seat);
+      if (holds7H) {
+        expect(legal).toEqual([{ type: 'playCard', seat, card: c('7', 'H') }]);
+        expect(isPlayable(s, c('7', 'S'))).toBe(false);
+        return;
+      }
+      expect(legal).toEqual([{ type: 'pass', seat }]);
+      s = applyAction(s, { type: 'pass', seat });
+    }
+    throw new Error('nobody held the 7 of Hearts');
   });
 
   it('after that: any 7 opens its suit; open suits extend one step up or down', () => {
@@ -100,33 +119,47 @@ describe('legality', () => {
 });
 
 describe('round and match', () => {
-  it('first player to empty their hand wins; others eat their cards as penalty', () => {
+  it('first out wins; others eat the VALUE of their leftover cards (A=1 … K=13)', () => {
     const s = position({ H: { low: 7, high: 7 } }, [c('8', 'H')]);
-    s.hands[1] = [c('2', 'C'), c('3', 'C')];
-    s.hands[2] = [c('K', 'D')];
-    s.hands[3] = [c('A', 'S'), c('2', 'S'), c('3', 'S')];
+    s.hands[1] = [c('2', 'C'), c('3', 'C')]; // 5 points
+    s.hands[2] = [c('K', 'D')]; // 13 points off one card
+    s.hands[3] = [c('A', 'S'), c('2', 'S'), c('3', 'S')]; // 6 points
     const after = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'H') });
     expect(after.phase).toBe('roundOver');
     expect(after.roundResult).toEqual({
       winner: 0,
       cardsLeft: [0, 2, 1, 3],
-      totalsAfter: [0, 2, 1, 3],
+      pointsLeft: [0, 5, 13, 6],
+      totalsAfter: [0, 5, 13, 6],
     });
-    expect(after.totals).toEqual([0, 2, 1, 3]);
+    expect(after.totals).toEqual([0, 5, 13, 6]);
   });
 
-  it('nextRound rotates the dealer and carries the totals', () => {
+  it("the round's biggest loser shuffles next, and totals carry over", () => {
     const s = position({ H: { low: 7, high: 7 } }, [c('8', 'H')]);
     s.hands[1] = [c('2', 'C')];
-    s.hands[2] = [c('K', 'D')];
+    s.hands[2] = [c('K', 'D')]; // 13 — worst this round
     s.hands[3] = [c('A', 'S')];
     const over = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'H') });
     const next = applyAction(over, { type: 'nextRound', seat: 0 });
     expect(next.roundNumber).toBe(2);
-    expect(next.dealer).toBe(1);
+    expect(next.dealer).toBe(2);
+    expect(next.turn).toBe(3); // right of the new shuffler starts
     expect(next.totals).toEqual(over.totals);
     expect(next.phase).toBe('playing');
     expect(next.hands.flat()).toHaveLength(52);
+  });
+
+  it('a round-score tie for shuffler breaks on the higher running total', () => {
+    const s = position({ H: { low: 7, high: 7 } }, [c('8', 'H')]);
+    s.totals = [0, 2, 9, 0];
+    s.hands[1] = [c('K', 'C')]; // 13 this round, 15 running
+    s.hands[2] = [c('K', 'D')]; // 13 this round, 22 running — shuffles next
+    s.hands[3] = [c('A', 'S')];
+    const over = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'H') });
+    expect(over.roundResult!.pointsLeft).toEqual([0, 13, 13, 1]);
+    const next = applyAction(over, { type: 'nextRound', seat: 0 });
+    expect(next.dealer).toBe(2);
   });
 
   it('the host can end the match at any point; lowest total wins', () => {

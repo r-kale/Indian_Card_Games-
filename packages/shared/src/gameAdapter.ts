@@ -57,6 +57,8 @@ export interface GameEngine<S, A, V> {
   newTrickPause(state: S): boolean;
   /** Actions only the room host may perform. */
   hostOnly(action: A): boolean;
+  /** Bot "thinking" time in ms; games that read better slow override this. */
+  botDelayMs?(): number;
 }
 
 export const game304Engine: GameEngine<Game304State, Action304, Player304View> = {
@@ -74,7 +76,7 @@ export const game304Engine: GameEngine<Game304State, Action304, Player304View> =
   autoAdvance: () => ({ type: 'nextDeal', seat: 0 }),
   newTrickPause: (state) =>
     state.phase === 'playing' && state.trick.length === 0 && state.lastTrick !== null,
-  hostOnly: () => false,
+  hostOnly: (action) => action.type === 'endMatch',
 };
 
 export const laddisEngine: GameEngine<LaddisState, LaddisAction, LaddisView> = {
@@ -124,6 +126,8 @@ export const badam7Engine: GameEngine<BadamState, BadamAction, BadamView> = {
   autoAdvance: () => ({ type: 'nextRound', seat: 0 }),
   newTrickPause: () => false,
   hostOnly: (action) => action.type === 'endMatch',
+  // A gentler pace than the trick games so the layout is readable move by move.
+  botDelayMs: () => 1400 + Math.random() * 700,
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

@@ -129,7 +129,7 @@ export interface StoreApi {
   createRoom: (nickname: string) => void;
   joinRoom: (roomCode: string, nickname: string) => void;
   hostP2PRoom: (nickname: string) => void;
-  startLocalGame: (nickname: string, gameId: GameId) => void;
+  startLocalGame: (nickname: string, gameId: GameId, players?: number) => void;
   setGame: (gameId: GameId) => void;
   leaveRoom: () => void;
   takeSeat: (seat: number) => void;
@@ -308,10 +308,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       p2pHost.current = host;
     },
-    startLocalGame: (nickname, gameId) => {
+    startLocalGame: (nickname, gameId, players) => {
       saveNickname(nickname);
-      const game = new LocalGame(nickname.trim() || 'You', gameId, (view) =>
-        dispatch({ type: 'view', view }),
+      const game = new LocalGame(
+        nickname.trim() || 'You',
+        gameId,
+        (view) => dispatch({ type: 'view', view }),
+        players,
       );
       localGame.current?.destroy();
       localGame.current = game;

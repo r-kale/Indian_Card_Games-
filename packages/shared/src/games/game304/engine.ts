@@ -3,7 +3,7 @@ import type { Card, Suit } from '../../core/cards';
 import { makeRng, shuffle } from '../../core/rng';
 import { legalFollows, ledSuit, trickWinner } from '../../core/tricks';
 import { matchWinners, scoreDeal } from './scoring';
-import { BID_STEP, IllegalActionError, MAX_BID, MIN_BID, nextSeat } from './types';
+import { BID_RAISE_MIN, BID_STEP, IllegalActionError, MAX_BID, MIN_BID, nextSeat } from './types';
 import type { Action304, Game304State, Seat } from './types';
 
 export interface DealConfig {
@@ -60,14 +60,15 @@ export function actingSeat(state: Game304State): Seat | null {
   }
 }
 
-/** Smallest legal raise over the current high bid (steps of 10, 304 on top). */
+/** Smallest legal raise over the current high bid (+10 minimum, 304 on top). */
 export function minRaise(highBid: number | null): number | null {
   if (highBid === null) return MIN_BID;
   if (highBid >= MAX_BID) return null;
-  const next = highBid + BID_STEP;
+  const next = highBid + BID_RAISE_MIN;
   return next > 300 ? MAX_BID : next;
 }
 
+/** Raises go +10 or +15 at a time, so bids land on multiples of 5 (or 304). */
 function isLegalBidAmount(amount: number, highBid: number | null): boolean {
   if (!Number.isInteger(amount)) return false;
   if (amount % BID_STEP !== 0 && amount !== MAX_BID) return false;
@@ -167,6 +168,9 @@ export function applyAction(state: Game304State, action: Action304): Game304Stat
       break;
     case 'nextDeal':
       return applyNextDeal(s);
+    case 'endMatch':
+      applyEndMatch(s);
+      break;
   }
   return s;
 }
@@ -175,11 +179,23 @@ function fail(message: string): never {
   throw new IllegalActionError(message);
 }
 
+/**
+ * The host may stop the match at any point — typically when one side has
+ * definitely won. The scores stand; the current leaders take the match.
+ */
+function applyEndMatch(s: Game304State): void {
+  if (s.phase === 'matchOver') fail('the match is already over');
+  s.phase = 'matchOver';
+  s.turn = null;
+}
+
 function applyBid(s: Game304State, seat: Seat, amount: number): void {
   if (s.phase !== 'bidding') fail('not in bidding phase');
   if (s.bidding.turn !== seat) fail('not your turn to bid');
   if (!isLegalBidAmount(amount, s.bidding.highBid)) {
-    fail(`bids go in steps of ${BID_STEP} (or ${MAX_BID}), at least ${minRaise(s.bidding.highBid)}`);
+    fail(
+      `raise by at least ${BID_RAISE_MIN} in steps of ${BID_STEP} (or bid ${MAX_BID}), from ${minRaise(s.bidding.highBid)}`,
+    );
   }
   s.bidding.highBid = amount;
   s.bidding.highBidder = seat;

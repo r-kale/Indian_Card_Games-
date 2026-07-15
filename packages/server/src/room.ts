@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
-import { engines, makeRng, MAX_PLAYERS_PER_ROOM } from '@icg/shared';
+import { engines, makeRng, MAX_PLAYERS_PER_ROOM, pickBotName } from '@icg/shared';
 import type {
   AnyGameEngine,
   ClientToServerEvents,
@@ -15,16 +15,6 @@ import type {
 export type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 export type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
-const BOT_NAMES = [
-  'Bot Chandu',
-  'Bot Meena',
-  'Bot Raju',
-  'Bot Lakshmi',
-  'Bot Ganpat',
-  'Bot Shalu',
-  'Bot Pinky',
-  'Bot Bablu',
-];
 const BOT_DELAY_MS = () => 600 + Math.floor(Math.random() * 600);
 /** Extra thinking time before the first card of a new trick, so the finished
  *  trick stays on the table long enough for everyone to see it. */
@@ -148,17 +138,17 @@ export class Room {
     this.assertSeatIndex(seat);
     if (this.seats[seat] !== null) throw new RoomError('seat is taken');
     const custom = name?.trim().slice(0, 20);
-    this.seats[seat] = { kind: 'bot', name: custom || this.defaultBotName(seat) };
+    this.seats[seat] = { kind: 'bot', name: custom || this.defaultBotName() };
     this.broadcast();
   }
 
-  private defaultBotName(seat: number): string {
-    const used = new Set(
+  private defaultBotName(): string {
+    return pickBotName(
       this.seats
         .filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot')
         .map((s) => s.name),
+      this.botRng,
     );
-    return BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${seat}`;
   }
 
   removeBot(token: string, seat: number): void {
@@ -206,7 +196,7 @@ export class Room {
   }
 
   private addBotToSeat(seat: number): void {
-    this.seats[seat] = { kind: 'bot', name: this.defaultBotName(seat) };
+    this.seats[seat] = { kind: 'bot', name: this.defaultBotName() };
   }
 
   toLobby(token: string): void {
@@ -276,7 +266,9 @@ export class Room {
     if (entry.kind === 'bot') {
       this.timer = setTimeout(
         () => this.playBotMove(seat),
-        this.engine.newTrickPause(game) ? NEW_TRICK_DELAY_MS() : BOT_DELAY_MS(),
+        this.engine.newTrickPause(game)
+          ? NEW_TRICK_DELAY_MS()
+          : (this.engine.botDelayMs?.() ?? BOT_DELAY_MS()),
       );
       return;
     }

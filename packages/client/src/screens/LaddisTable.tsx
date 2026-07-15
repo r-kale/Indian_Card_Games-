@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cardKey, formatKalyas, SUIT_NAMES, SUITS, VAKHAAI_BETS } from '@icg/shared';
 import type { LaddisAction, LaddisView, RoomState, Seat, Suit, TrickPlay, VakhaaiBet } from '@icg/shared';
 import { CardBack, CardFace } from '../components/CardFace';
+import { EndMatchButton } from '../components/EndMatchButton';
 import { Hand } from '../components/Hand';
 import { TrickArea } from '../components/TrickArea';
 import { useStore } from '../store';
@@ -167,7 +168,7 @@ export function LaddisTable() {
           </div>
         )}
         {isHost && mySeat !== null && view.phase !== 'matchOver' && (
-          <EndMatchButton seat={mySeat} onAction={sendAction} />
+          <EndMatchButton onEnd={() => sendAction({ type: 'endMatch', seat: mySeat })} />
         )}
         {isHost && (
           <button className="link" onClick={toLobby}>
@@ -212,36 +213,6 @@ export function LaddisTable() {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Host control to stop the match at any point (e.g. when a side is clearly
- * lost). Two taps so a stray click can't end everyone's game.
- */
-function EndMatchButton({
-  seat,
-  onAction,
-}: {
-  seat: Seat;
-  onAction: (a: LaddisAction) => void;
-}) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return undefined;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
-  return (
-    <button
-      className="link"
-      onClick={() => {
-        if (armed) onAction({ type: 'endMatch', seat });
-        else setArmed(true);
-      }}
-    >
-      {armed ? 'Tap again to end the match' : 'End match — settle the score'}
-    </button>
   );
 }
 

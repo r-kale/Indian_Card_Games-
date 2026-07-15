@@ -1,28 +1,35 @@
-import { engines, makeRng } from '@icg/shared';
-import type { AnyGameEngine, GameAction, GameId, GameView, RoomState } from '@icg/shared';
-
-const BOT_NAMES = ['Bot Chandu', 'Bot Meena', 'Bot Raju'];
+import { engines, makeRng, pickBotName } from '@icg/shared';
+import type { AnyGameEngine, GameAction, GameId, GameView, RoomState, SeatInfo } from '@icg/shared';
 
 /**
  * A complete game running entirely in the browser: you at seat 0 against
- * three bots. Powers the offline mode of static (GitHub Pages) deployments —
- * same engines, same redacted views, no server involved.
+ * bots (three by default; Badam 7 tables can go up to eight players).
+ * Powers the offline mode of static (GitHub Pages) deployments — same
+ * engines, same redacted views, no server involved.
  */
 export class LocalGame {
   private state: unknown;
   private readonly engine: AnyGameEngine;
   private readonly rng = makeRng(`local-${Date.now()}-${Math.random()}`);
+  private readonly botNames: string[] = [];
+  private readonly players: number;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly nickname: string,
     private readonly gameId: GameId,
     private readonly onView: (view: GameView) => void,
+    players = 4,
   ) {
     this.engine = engines[gameId];
+    this.players = Math.min(Math.max(players, this.engine.minSeats), this.engine.maxSeats);
+    for (let i = 1; i < this.players; i++) {
+      this.botNames.push(pickBotName(this.botNames, this.rng));
+    }
     this.state = this.engine.init({
       seed: `local-${Date.now()}-${Math.random()}`,
       hostSeat: 0,
+      players: this.players,
     });
   }
 
@@ -32,16 +39,17 @@ export class LocalGame {
   }
 
   roomState(): RoomState {
+    const seats: (SeatInfo | null)[] = [
+      { kind: 'human', playerId: 'local-you', nickname: this.nickname, connected: true },
+      ...this.botNames.map(
+        (name): SeatInfo => ({ kind: 'bot', playerId: null, nickname: name, connected: true }),
+      ),
+    ];
     return {
       code: 'SOLO',
       phase: 'inGame',
       gameId: this.gameId,
-      seats: [
-        { kind: 'human', playerId: 'local-you', nickname: this.nickname, connected: true },
-        { kind: 'bot', playerId: null, nickname: BOT_NAMES[0]!, connected: true },
-        { kind: 'bot', playerId: null, nickname: BOT_NAMES[1]!, connected: true },
-        { kind: 'bot', playerId: null, nickname: BOT_NAMES[2]!, connected: true },
-      ],
+      seats,
       spectators: [],
       hostId: 'local-you',
     };
@@ -65,7 +73,9 @@ export class LocalGame {
     if (seat === null || seat === 0) return; // the human is on the clock
     this.timer = setTimeout(
       () => this.playBot(seat),
-      this.engine.newTrickPause(this.state) ? 2300 + Math.random() * 400 : 500 + Math.random() * 500,
+      this.engine.newTrickPause(this.state)
+        ? 2300 + Math.random() * 400
+        : (this.engine.botDelayMs?.() ?? 500 + Math.random() * 500),
     );
   }
 

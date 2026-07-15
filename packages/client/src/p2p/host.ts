@@ -1,6 +1,6 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import { engines, makeRng, ROOM_CODE_ALPHABET } from '@icg/shared';
+import { engines, makeRng, pickBotName, ROOM_CODE_ALPHABET } from '@icg/shared';
 import type {
   AnyGameEngine,
   GameAction,
@@ -14,16 +14,7 @@ import type {
 import { HEARTBEAT_MS, P2P_CODE_LENGTH, peerIdForCode, peerOptions } from './protocol';
 import type { GuestToHost, HostToGuest } from './protocol';
 
-const BOT_NAMES = [
-  'Bot Chandu',
-  'Bot Meena',
-  'Bot Raju',
-  'Bot Lakshmi',
-  'Bot Ganpat',
-  'Bot Shalu',
-  'Bot Pinky',
-  'Bot Bablu',
-];
+
 
 /** crypto.randomUUID with a fallback for older phone browsers. */
 function uuid(): string {
@@ -220,7 +211,7 @@ export class P2PHost {
     this.assertSeatIndex(seat);
     if (this.seats[seat] !== null) throw new Error('seat is taken');
     const custom = name?.trim().slice(0, 20);
-    this.seats[seat] = { kind: 'bot', name: custom || this.freeBotName(seat) };
+    this.seats[seat] = { kind: 'bot', name: custom || this.freeBotName() };
     this.broadcast();
   }
 
@@ -260,7 +251,7 @@ export class P2PHost {
     if (this.engine.minSeats === this.engine.maxSeats) {
       for (let i = 0; i < this.seats.length; i++) {
         if (this.seats[i] === null) {
-          this.seats[i] = { kind: 'bot', name: this.freeBotName(i) };
+          this.seats[i] = { kind: 'bot', name: this.freeBotName() };
         }
       }
     } else {
@@ -268,7 +259,7 @@ export class P2PHost {
       // four seated players get bot company up to a table of four.
       this.seats = this.seats.filter((s) => s !== null);
       while (this.seats.length < 4) {
-        this.seats.push({ kind: 'bot', name: this.freeBotName(this.seats.length) });
+        this.seats.push({ kind: 'bot', name: this.freeBotName() });
       }
     }
     this.phase = 'inGame';
@@ -339,7 +330,7 @@ export class P2PHost {
         () => this.playBotMove(seat),
         this.engine.newTrickPause(game)
           ? 2300 + Math.random() * 400
-          : 600 + Math.random() * 600,
+          : (this.engine.botDelayMs?.() ?? 600 + Math.random() * 600),
       );
       return;
     }
@@ -418,13 +409,13 @@ export class P2PHost {
     return null;
   }
 
-  private freeBotName(seat: number): string {
-    const used = new Set(
+  private freeBotName(): string {
+    return pickBotName(
       this.seats
         .filter((s): s is Extract<SeatEntry, { kind: 'bot' }> => s?.kind === 'bot')
         .map((s) => s.name),
+      this.botRng,
     );
-    return BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${seat}`;
   }
 
   private clearTimer(): void {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { badamMatchWinners, cardKey, rankAtValue, RANK_VALUE } from '@icg/shared';
 import type { BadamAction, BadamView, RoomState, SuitLayout } from '@icg/shared';
+import { EndMatchButton } from '../components/EndMatchButton';
 import { Hand } from '../components/Hand';
 import { useStore } from '../store';
 
@@ -81,7 +81,7 @@ export function BadamTable() {
       <div className="table-side">
         <BadamScorePanel view={view} nameOf={nameOf} />
         {isHost && mySeat !== null && view.phase !== 'matchOver' && (
-          <EndMatchButton seat={mySeat} onAction={sendAction} />
+          <EndMatchButton onEnd={() => sendAction({ type: 'endMatch', seat: mySeat })} />
         )}
         {isHost && (
           <button className="link" onClick={toLobby}>
@@ -254,32 +254,5 @@ function BadamScorePanel({ view, nameOf }: { view: BadamView; nameOf: (seat: num
         The value of leftover cards (A=1 … K=13) counts against you — lowest total wins.
       </p>
     </div>
-  );
-}
-
-/** Host control to stop the match at any point; two taps against stray clicks. */
-function EndMatchButton({
-  seat,
-  onAction,
-}: {
-  seat: number;
-  onAction: (a: BadamAction) => void;
-}) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return undefined;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
-  return (
-    <button
-      className="link"
-      onClick={() => {
-        if (armed) onAction({ type: 'endMatch', seat });
-        else setArmed(true);
-      }}
-    >
-      {armed ? 'Tap again to end the match' : 'End match — settle the score'}
-    </button>
   );
 }

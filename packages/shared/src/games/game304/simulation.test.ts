@@ -32,9 +32,11 @@ describe('bot simulation', () => {
           const result = state.dealResult!;
           expect(result.partnerSeat).not.toBe(result.bidder);
           expect(['allied', 'lone']).toContain(state.partner!.status);
-          // Deltas always match the alliance outcome.
+          // Deltas always match the alliance outcome (lost bids cost points):
+          // made -> winners collect +2 net; allied failure -> +2 defenders,
+          // -2 bid team = 0; lone failure -> +3 others, -2 bidder = +1.
           const deltaSum = result.deltas.reduce((a, b) => a + b, 0);
-          expect(deltaSum).toBe(result.alliance === 'lone' ? (result.madeIt ? 2 : 3) : 2);
+          expect(deltaSum).toBe(result.madeIt ? 2 : result.alliance === 'lone' ? 1 : 0);
           totalDeals++;
           state = applyAction(state, { type: 'nextDeal', seat: 0 });
           continue;

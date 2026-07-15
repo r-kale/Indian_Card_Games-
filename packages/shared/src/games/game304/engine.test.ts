@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '../../core/cards';
-import { applyAction, initDeal, legalActions, minRaise } from './engine';
-import { matchWinners, scoreDeal } from './scoring';
+import { actingSeat, applyAction, initDeal, legalActions, minRaise } from './engine';
+import { matchLeaders, matchWinners, scoreDeal } from './scoring';
 import { redactFor } from './view';
 import { IllegalActionError } from './types';
 import type { Game304State, Seat } from './types';
@@ -37,17 +37,21 @@ describe('bidding', () => {
     expect(() => applyAction(s, { type: 'pass', seat: 1 })).toThrow(IllegalActionError);
   });
 
-  it('moves in steps of 10, with 304 as the top bid', () => {
+  it('raises go +10 or +15 (multiples of 5), with 304 as the top bid', () => {
     let s = freshDeal();
     s = applyAction(s, { type: 'bid', seat: 1, amount: 160 });
     expect(() => applyAction(s, { type: 'bid', seat: 2, amount: 165 })).toThrow(
-      IllegalActionError,
+      IllegalActionError, // must raise by at least 10
     );
     expect(() => applyAction(s, { type: 'bid', seat: 2, amount: 160 })).toThrow(
       IllegalActionError,
     );
-    s = applyAction(s, { type: 'bid', seat: 2, amount: 170 });
-    expect(s.bidding.highBid).toBe(170);
+    expect(() => applyAction(s, { type: 'bid', seat: 2, amount: 172 })).toThrow(
+      IllegalActionError, // not a multiple of 5
+    );
+    s = applyAction(s, { type: 'bid', seat: 2, amount: 175 }); // a +15 raise
+    expect(s.bidding.highBid).toBe(175);
+    expect(minRaise(175)).toBe(185);
     expect(minRaise(300)).toBe(304);
     expect(minRaise(304)).toBeNull();
     s = applyAction(s, { type: 'bid', seat: 3, amount: 300 });
@@ -188,7 +192,7 @@ describe('playing', () => {
       alliance: 'lone',
       bidTeamPoints: 90,
       madeIt: false,
-      deltas: [1, 0, 1, 1], // ex-partner counts among the three winners
+      deltas: [1, -2, 1, 1], // ex-partner wins with the three; the lone bidder pays -2
     });
   });
 
@@ -239,7 +243,7 @@ describe('playing', () => {
 });
 
 describe('scoring helpers', () => {
-  it('awards +1 to each winner when allied', () => {
+  it('awards +1 to each winner when allied; a lost bid costs the bid team', () => {
     const made = scoreDeal(
       [50, 150, 40, 64],
       { amount: 200, bidder: 1 },
@@ -259,10 +263,10 @@ describe('scoring helpers', () => {
       'allied',
     );
     expect(failed.madeIt).toBe(false);
-    expect(failed.deltas).toEqual([1, 0, 1, 0]);
+    expect(failed.deltas).toEqual([1, -1, 1, -1]); // defenders +1, bid team -1 each
   });
 
-  it('pays a lone bidder +2, or +1 to each of the other three', () => {
+  it('pays a lone bidder +2 made / -2 failed, with +1 to each of the other three', () => {
     const made = scoreDeal(
       [40, 210, 30, 24],
       { amount: 200, bidder: 1 },
@@ -280,11 +284,21 @@ describe('scoring helpers', () => {
       'H',
       'lone',
     );
-    expect(failed).toMatchObject({ bidTeamPoints: 190, madeIt: false, deltas: [1, 0, 1, 1] });
+    expect(failed).toMatchObject({ bidTeamPoints: 190, madeIt: false, deltas: [1, -2, 1, 1] });
   });
 
-  it('detects match winners at 5 points', () => {
+  it('detects match winners at 5 points, and leaders for an early end', () => {
     expect(matchWinners([4, 4, 4, 4])).toEqual([]);
     expect(matchWinners([5, 2, 5, 2])).toEqual([0, 2]);
+    expect(matchLeaders([5, 2, 5, 2])).toEqual([0, 2]);
+    expect(matchLeaders([3, -1, 3, 0])).toEqual([0, 2]); // ended early: top score leads
+  });
+
+  it('the host can end the match at any point; the scores stand', () => {
+    const s = freshDeal();
+    const ended = applyAction(s, { type: 'endMatch', seat: 0 });
+    expect(ended.phase).toBe('matchOver');
+    expect(actingSeat(ended)).toBeNull();
+    expect(() => applyAction(ended, { type: 'endMatch', seat: 0 })).toThrow(IllegalActionError);
   });
 });

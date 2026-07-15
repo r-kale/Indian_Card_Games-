@@ -5,8 +5,10 @@ export type Seat = 0 | 1 | 2 | 3;
 
 export const MIN_BID = 160;
 export const MAX_BID = 304;
-/** Bids move in steps of 10 (…290, 300), with 304 allowed as the top bid. */
-export const BID_STEP = 10;
+/** A raise must beat the standing bid by at least this much… */
+export const BID_RAISE_MIN = 10;
+/** …and bids land on multiples of this (raises of +10 / +15), or 304 itself. */
+export const BID_STEP = 5;
 /** First player to this many points wins the match (+1 per deal won). */
 export const MATCH_TARGET = 5;
 
@@ -88,7 +90,8 @@ export type Action304 =
   | { type: 'pass'; seat: Seat }
   | { type: 'declare'; seat: Seat; trumpSuit: Suit; partnerCard: Card }
   | { type: 'playCard'; seat: Seat; card: Card }
-  | { type: 'nextDeal'; seat: Seat };
+  | { type: 'nextDeal'; seat: Seat }
+  | { type: 'endMatch'; seat: Seat };
 
 /** What one seat (or a spectator) is allowed to see. */
 export interface Player304View {

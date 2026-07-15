@@ -53,7 +53,11 @@ export interface PartnerState {
   status: PartnerStatus;
 }
 
-/** A K+Q pair held in one hand, announced after the hukum is declared. */
+/**
+ * A K+Q pair of one suit, SHOWN by its holder during play. Showing is only
+ * possible once the holder's side has won a hand, and only while both cards
+ * are still in hand; only shown marriages shift the bid target.
+ */
 export interface Marriage {
   seat: Seat;
   suit: Suit;
@@ -110,6 +114,7 @@ export type Action304 =
   | { type: 'pass'; seat: Seat }
   | { type: 'declare'; seat: Seat; trumpSuit: Suit; partnerCard: Card }
   | { type: 'playCard'; seat: Seat; card: Card }
+  | { type: 'showMarriage'; seat: Seat; suit: Suit }
   | { type: 'nextDeal'; seat: Seat }
   | { type: 'endMatch'; seat: Seat };
 

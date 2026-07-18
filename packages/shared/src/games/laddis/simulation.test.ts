@@ -28,8 +28,9 @@ describe('laddis bot simulation', () => {
         const seat = actingSeat(state);
         if (seat === null) {
           // roundOver: check invariants, then continue or end the match.
+          // Decided rounds end early, so at most 4 (vakhaai) or 8 hands fall.
           const expectedTricks = state.mode === 'vakhaai' ? 4 : 8;
-          expect(state.tricksTaken.reduce((a, b) => a + b, 0)).toBe(expectedTricks);
+          expect(state.tricksTaken.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(expectedTricks);
           const r = state.roundResult!;
           expect(r.deficitAfter).toBeGreaterThanOrEqual(0);
           if (state.mode === 'vakhaai') {

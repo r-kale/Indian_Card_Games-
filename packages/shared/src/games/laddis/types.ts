@@ -99,6 +99,8 @@ export type LaddisAction =
   | { type: 'passSix'; seat: Seat }
   | { type: 'callHukum'; seat: Seat }
   | { type: 'playCard'; seat: Seat; card: Card }
+  /** Concede the rest of the round once its outcome is already decided. */
+  | { type: 'endRound'; seat: Seat }
   | { type: 'nextRound'; seat: Seat }
   | { type: 'endMatch'; seat: Seat };
 

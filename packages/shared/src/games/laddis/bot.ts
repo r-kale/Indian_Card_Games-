@@ -16,8 +16,12 @@ export function chooseAction(view: LaddisView, rng: Rng): LaddisAction {
       return { type: 'declareHukum', seat: view.seat as Seat, suit: bestSuit(view.hand) };
     case 'sixCall':
       return chooseSix(view);
-    case 'playing':
+    case 'playing': {
+      // The outcome is already decided: throw the cards in, like at a real table.
+      const endRound = actions.find((a) => a.type === 'endRound');
+      if (endRound !== undefined) return endRound;
       return choosePlay(view, actions, rng);
+    }
     case 'roundOver':
       return actions.find((a) => a.type === 'nextRound')!;
     case 'matchOver':

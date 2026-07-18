@@ -65,6 +65,7 @@ export function LaddisTable() {
     view.phase === 'declaring' && mySeat !== null && actor === mySeat;
   const mySixTurn = view.phase === 'sixCall' && mySeat !== null && view.window.turn === mySeat;
   const callHukumAction = view.legalActions.find((a) => a.type === 'callHukum');
+  const endRoundAction = view.legalActions.find((a) => a.type === 'endRound');
 
   const badge = (seat: Seat) => (
     <LaddisSeatBadge seat={seat} room={room} view={view} active={actor === seat} />
@@ -120,6 +121,13 @@ export function LaddisTable() {
             {callHukumAction !== undefined && (
               <button className="reveal-btn" onClick={() => sendAction(callHukumAction)}>
                 Call for the hukum
+              </button>
+            )}
+            {endRoundAction !== undefined && (
+              <button className="reveal-btn" onClick={() => sendAction(endRoundAction)}>
+                {view.mode === 'vakhaai'
+                  ? 'Vakhaai broken — end the round'
+                  : 'Outcome decided — end the round'}
               </button>
             )}
             <Hand

@@ -11,8 +11,10 @@ export const VAKHAAI_BETS = [8, 16, 32] as const;
 export type VakhaaiBet = (typeof VAKHAAI_BETS)[number];
 
 /** Normal round: shuffling team recovers 5 on a win, pays 10 on a loss. */
-export const NORMAL_WIN = 5;
-export const NORMAL_LOSS = 10;
+/** Normal round: the shuffling side recovers 10 when they take their 4 hands… */
+export const NORMAL_WIN = 10;
+/** …and pays 5 into the deficit when the hukum side makes its 5. */
+export const NORMAL_LOSS = 5;
 /** Six-hand call by the non-shuffling side: worth 6, pays 12 on failure. */
 export const SIX_WIN = 6;
 export const SIX_LOSS = 12;

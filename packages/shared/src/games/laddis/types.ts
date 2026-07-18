@@ -10,12 +10,11 @@ export const KALYAS_PER_ARDHA = 16;
 export const VAKHAAI_BETS = [8, 16, 32] as const;
 export type VakhaaiBet = (typeof VAKHAAI_BETS)[number];
 
-/** Normal round: shuffling team recovers 5 on a win, pays 10 on a loss. */
 /** Normal round: the shuffling side recovers 10 when they take their 4 hands… */
 export const NORMAL_WIN = 10;
 /** …and pays 5 into the deficit when the hukum side makes its 5. */
 export const NORMAL_LOSS = 5;
-/** Six-hand call by the non-shuffling side: worth 6, pays 12 on failure. */
+/** A made six is worth 6 either way. */
 export const SIX_WIN = 6;
 /** A failed six by the shuffling side costs them 6… */
 export const SIX_LOSS_SHUFFLING = 6;
@@ -130,6 +129,8 @@ export interface LaddisView {
   tricksTaken: [number, number, number, number];
   lastTrick: TrickPlay[] | null;
   lastTrickWinner: Seat | null;
+  /** Once the round is over, everyone's remaining cards are laid open. */
+  showdown: Card[][] | null;
   roundResult: RoundResult | null;
   legalActions: LaddisAction[];
 }

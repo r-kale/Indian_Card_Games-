@@ -189,7 +189,7 @@ export function LaddisTable() {
       {myDeclareTurn && <HukumDialog view={view} onAction={sendAction} />}
       {mySixTurn && <SixDialog view={view} onAction={sendAction} />}
 
-      {view.phase === 'roundOver' && view.roundResult !== null && (
+      {view.phase === 'roundOver' && view.roundResult !== null && !showLinger && (
         <RoundOverDialog
           view={view}
           room={room}
@@ -495,6 +495,46 @@ function RoundOverDialog({
             ? `roles swap! ${teamNames(r.shufflingTeamAfter)} now shuffle at ${formatKalyas(r.deficitAfter)}`
             : `${teamNames(r.shufflingTeamAfter)} still down ${formatKalyas(r.deficitAfter)}`}
         </p>
+        {view.lastTrick !== null && view.lastTrickWinner !== null && (
+          <div className="showdown-block">
+            <div className="hukum-label">
+              The deciding hand — {nameOf(view.lastTrickWinner)} took it
+            </div>
+            <div className="last-trick-cards">
+              {view.lastTrick.map((p, i) => (
+                <div key={p.seat} className="last-trick-card">
+                  <CardFace card={p.card} size="small" showPoints={false} />
+                  <span className="last-trick-who">
+                    {i === 0 ? '· ' : ''}
+                    {nameOf(p.seat as Seat).slice(0, 8)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {view.showdown !== null && view.showdown.some((h) => h.length > 0) && (
+          <div className="showdown-block">
+            <div className="hukum-label">Cards everyone was still holding</div>
+            {view.showdown.map((cards, seat) =>
+              cards.length > 0 ? (
+                <div key={seat} className="showdown-row">
+                  <span className="showdown-name">{nameOf(seat as Seat)}</span>
+                  <span className="showdown-cards">
+                    {cards.map((card) => (
+                      <CardFace
+                        key={`${card.rank}${card.suit}`}
+                        card={card}
+                        size="small"
+                        showPoints={false}
+                      />
+                    ))}
+                  </span>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
         {r.deficitAfter >= 32 && (
           <p className="center-note">
             {teamNames(r.shufflingTeamAfter)} are {r.deficitAfter} kalyas down — the host can

@@ -1057,3 +1057,30 @@ input::placeholder {
   font-size: 13px;
   color: #cbd5e1;
 }
+
+/* Round-over showdown: the deciding hand and everyone's leftover cards. */
+.showdown-block {
+  background: #00000033;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.showdown-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.showdown-name {
+  min-width: 92px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.showdown-cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}

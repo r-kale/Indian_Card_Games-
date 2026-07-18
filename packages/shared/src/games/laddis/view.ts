@@ -42,6 +42,10 @@ export function redactFor(state: LaddisState, seat: Seat | null): LaddisView {
     tricksTaken: state.tricksTaken,
     lastTrick: state.lastTrick,
     lastTrickWinner: state.lastTrickWinner,
+    showdown:
+      state.phase === 'roundOver' || state.phase === 'matchOver'
+        ? state.hands.map((h) => sortHand(h, RANK_ORDER_STANDARD))
+        : null,
     roundResult: state.roundResult,
     legalActions: seat === null ? [] : legalActions(state, seat),
   };

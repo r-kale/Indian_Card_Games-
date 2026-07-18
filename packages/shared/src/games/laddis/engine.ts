@@ -315,7 +315,13 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
 
   if (s.trick.length === 4) {
     const trumpSuit = s.hukum !== null && s.hukum.revealed ? s.hukum.suit : null;
-    const winner = trickWinner(s.trick, RANK_ORDER_STANDARD, trumpSuit) as Seat;
+    // In a vakhaai round the caller's partner is redundant: their card goes
+    // into the middle like everyone's but can never win the hand.
+    const counted =
+      s.mode === 'vakhaai'
+        ? s.trick.filter((p) => p.seat !== partnerOf(s.vakhaai!.caller))
+        : s.trick;
+    const winner = trickWinner(counted, RANK_ORDER_STANDARD, trumpSuit) as Seat;
     s.tricksTaken[winner] += 1;
     s.lastTrick = s.trick;
     s.lastTrickWinner = winner;

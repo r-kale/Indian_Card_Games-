@@ -4,7 +4,7 @@ import type { GameAction, GameEvent, GameView, RoomState } from '@icg/shared';
 import { HEARTBEAT_TIMEOUT_MS, peerIdForCode, peerOptions } from './protocol';
 import type { GuestToHost, HostToGuest } from './protocol';
 
-const CONNECT_TIMEOUT_MS = 10_000;
+const CONNECT_TIMEOUT_MS = 15_000; // TURN relay negotiation can take a while
 
 export interface GuestCallbacks {
   onRoom: (room: RoomState) => void;
@@ -30,9 +30,26 @@ export class P2PGuest {
     return new Promise((resolve, reject) => {
       const peer = new Peer(peerOptions());
       this.peer = peer;
+      // Track how far the handshake got, so the timeout can say what failed.
+      let brokerReached = false;
+      let channelOpened = false;
       const timeout = setTimeout(() => {
         this.destroy();
-        reject(new Error('no P2P room with that code (is the host tab still open?)'));
+        if (!brokerReached) {
+          reject(
+            new Error(
+              'could not reach the P2P broker — a firewall or this network may block it; try another network',
+            ),
+          );
+        } else if (!channelOpened) {
+          reject(
+            new Error(
+              'found the room but could not open a connection to the host — a strict network may be blocking it; try again, or put both devices on the same Wi-Fi',
+            ),
+          );
+        } else {
+          reject(new Error('the host did not respond — ask them to check their tab is open'));
+        }
       }, CONNECT_TIMEOUT_MS);
 
       peer.on('error', (e) => {
@@ -44,9 +61,11 @@ export class P2PGuest {
       });
 
       peer.on('open', () => {
+        brokerReached = true;
         const conn = peer.connect(peerIdForCode(code), { reliable: true });
         this.conn = conn;
         conn.on('open', () => {
+          channelOpened = true;
           conn.send({ t: 'hello', nickname } satisfies GuestToHost);
           // Tab-death and network drops rarely fire 'close' promptly; a silent
           // host is a gone host.

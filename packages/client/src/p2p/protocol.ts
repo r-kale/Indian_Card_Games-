@@ -34,14 +34,48 @@ export function peerIdForCode(code: string): string {
 }
 
 /**
+ * STUN finds a direct path between the two browsers; the TURN entries are a
+ * relay of last resort for strict NATs (mobile carriers, office networks)
+ * where no direct path exists — without them, joins from a different network
+ * than the host simply time out. Open Relay is a free public TURN service.
+ */
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:openrelay.metered.ca:80' },
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
+
+/**
  * Optional self-hosted PeerJS broker via ?srv=host:port (same convention as
  * the beer game); defaults to the free public PeerJS cloud broker, which only
- * introduces peers — game data flows browser-to-browser.
+ * introduces peers — game data flows browser-to-browser (or via TURN relay).
  */
 export function peerOptions(): Record<string, unknown> {
+  const iceConfig = { config: { iceServers: ICE_SERVERS } };
   const srv = new URLSearchParams(window.location.search).get('srv');
-  if (srv === null) return {};
+  if (srv === null) return iceConfig;
   const [host, port] = srv.split(':');
   const local = srv.startsWith('localhost') || srv.startsWith('127.');
-  return { host, port: Number(port) || 443, path: '/', key: 'peerjs', secure: !local };
+  return {
+    host,
+    port: Number(port) || 443,
+    path: '/',
+    key: 'peerjs',
+    secure: !local,
+    ...iceConfig,
+  };
 }

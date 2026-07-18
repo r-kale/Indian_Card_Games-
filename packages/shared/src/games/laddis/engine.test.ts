@@ -261,6 +261,37 @@ describe('scoring the ledger', () => {
     expect(formatKalyas(37)).toBe('37 kalyas');
   });
 
+  it('a decided round can be ended early — but only once it is decided', () => {
+    // Walk into a normal playing round.
+    let s = fresh();
+    s = passVakhaai(s);
+    s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
+    for (const seat of [1, 3, 2, 0] as const) {
+      s = applyAction(s, { type: 'passSix', seat });
+    }
+    expect(s.phase).toBe('playing');
+    // Nothing decided yet: ending is illegal and not offered.
+    expect(legalActions(s, 0).some((a) => a.type === 'endRound')).toBe(false);
+    expect(() => applyAction(s, { type: 'endRound', seat: 0 })).toThrow(LaddisError);
+    // Shuffling team (0 & 2) reaches its 4 hands: the hukum side cannot get 5.
+    s.tricksTaken = [2, 1, 2, 0];
+    expect(legalActions(s, 1).some((a) => a.type === 'endRound')).toBe(true);
+    const over = applyAction(s, { type: 'endRound', seat: 1 });
+    expect(over.phase).toBe('roundOver');
+    expect(over.roundResult).toMatchObject({ made: true, delta: -10 });
+    expect(over.hukum!.revealed).toBe(true); // showdown
+    // Vakhaai: the caller missing a single hand decides the round at once.
+    let v = fresh();
+    v = applyAction(v, { type: 'passVakhaai', seat: 1 });
+    v = applyAction(v, { type: 'vakhaai', seat: 2, bet: 16 });
+    expect(legalActions(v, 2).some((a) => a.type === 'endRound')).toBe(false);
+    v.tricksTaken = [1, 0, 0, 0]; // someone other than the caller took a hand
+    expect(legalActions(v, 0).some((a) => a.type === 'endRound')).toBe(true);
+    const vOver = applyAction(v, { type: 'endRound', seat: 0 });
+    expect(vOver.phase).toBe('roundOver');
+    expect(vOver.roundResult).toMatchObject({ mode: 'vakhaai', made: false, delta: 32 });
+  });
+
   it('the host can end the match at any point; the ledger stands', () => {
     // Mid-play: a side that is clearly lost can concede without finishing the round.
     let s = fresh();

@@ -3,7 +3,7 @@ import type { Card, Suit } from '../../core/cards';
 import { makeRng, shuffle } from '../../core/rng';
 import { legalFollows, ledSuit, trickWinner } from '../../core/tricks';
 import { scoreRound } from './scoring';
-import { LaddisError, nextSeat, partnerOf, VAKHAAI_BETS } from './types';
+import { LaddisError, nextSeat, partnerOf, teamOf, VAKHAAI_BETS } from './types';
 import type { LaddisAction, LaddisState, Seat, Team, VakhaaiBet } from './types';
 
 export interface RoundConfig {
@@ -90,7 +90,10 @@ export function legalActions(state: LaddisState, seat: Seat): LaddisAction[] {
       ];
     }
     case 'playing': {
-      if (state.turn !== seat) return [];
+      // Once the round's outcome is already decided (a vakhaai caller missed
+      // a hand, or a side reached its target), anyone may end it early.
+      if (roundDecided(state)) actions.push({ type: 'endRound', seat });
+      if (state.turn !== seat) return actions;
       for (const card of legalPlays(state, seat)) actions.push({ type: 'playCard', seat, card });
       const led = ledSuit(state.trick);
       if (
@@ -151,6 +154,9 @@ export function applyAction(state: LaddisState, action: LaddisAction): LaddisSta
       break;
     case 'playCard':
       applyPlayCard(s, action.seat, action.card);
+      break;
+    case 'endRound':
+      applyEndRound(s);
       break;
     case 'nextRound':
       return applyNextRound(s);
@@ -260,6 +266,37 @@ function applyCallHukum(s: LaddisState, seat: Seat): void {
   }
   hukum.revealed = true;
   s.mustPlayHukum = seat;
+}
+
+/**
+ * Is the round's result already beyond doubt?
+ * - vakhaai: the caller (who needs all 4 hands) has missed one;
+ * - six-call: the callers reached 6, or their opponents reached 3;
+ * - normal: the shuffling side reached 4, or the hukum side reached 5.
+ */
+export function roundDecided(s: LaddisState): boolean {
+  const teamTricks = (team: Team) =>
+    s.tricksTaken[team] + s.tricksTaken[(team + 2) as Seat];
+  if (s.mode === 'vakhaai') {
+    const caller = s.vakhaai!.caller;
+    return s.tricksTaken.some((t, seat) => seat !== caller && t > 0);
+  }
+  if (s.mode === 'six') {
+    const attacking = teamOf(s.six!.caller);
+    return teamTricks(attacking) >= 6 || teamTricks((1 - attacking) as Team) >= 3;
+  }
+  return teamTricks(s.shufflingTeam) >= 4 || teamTricks((1 - s.shufflingTeam) as Team) >= 5;
+}
+
+/** Score the round as it stands; the remaining hands cannot change anything. */
+function applyEndRound(s: LaddisState): void {
+  if (s.phase !== 'playing') fail('not in the playing phase');
+  if (!roundDecided(s)) fail('the round is not decided yet — play on');
+  s.roundResult = scoreRound(s);
+  if (s.hukum !== null) s.hukum.revealed = true; // showdown: everyone learns it
+  s.phase = 'roundOver';
+  s.turn = null;
+  s.mustPlayHukum = null;
 }
 
 function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {

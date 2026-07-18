@@ -1,3 +1,4 @@
+import { makeRng } from './core/rng';
 import {
   actingSeat as actingSeat304,
   applyAction as apply304,
@@ -82,14 +83,18 @@ export const game304Engine: GameEngine<Game304State, Action304, Player304View> =
 export const laddisEngine: GameEngine<LaddisState, LaddisAction, LaddisView> = {
   minSeats: 4,
   maxSeats: 4,
-  init: ({ seed, hostSeat }) =>
-    initRound({
+  // At 0-0 a random side starts shuffling (seeded), with a random member dealing.
+  init: ({ seed }) => {
+    const rng = makeRng(`${seed}/setup`);
+    const dealer = Math.floor(rng() * 4) as LaddisSeat;
+    return initRound({
       deficit: 0,
-      shufflingTeam: laddisTeamOf((hostSeat ?? 0) as LaddisSeat),
-      dealer: (hostSeat ?? 0) as LaddisSeat,
+      shufflingTeam: laddisTeamOf(dealer),
+      dealer,
       seed,
       roundNumber: 1,
-    }),
+    });
+  },
   actingSeat: (state) => actingSeatLaddis(state),
   legalActions: (state, seat) => legalLaddis(state, seat as LaddisSeat),
   apply: (state, action) => applyLaddis(state, action),

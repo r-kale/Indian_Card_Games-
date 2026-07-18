@@ -177,13 +177,23 @@ describe('scoring the ledger', () => {
     return s;
   };
 
-  it('normal round: shuffling team recovers 5 with 4 hands, pays 10 without', () => {
+  it('normal round: shuffling team recovers 10 with 4 hands, pays 5 without', () => {
     let s = base();
     s.tricksTaken = [2, 3, 2, 1]; // team 0 (shuffling) has 4
-    expect(scoreRound(s)).toMatchObject({ made: true, delta: -5, deficitAfter: 5, swapped: false });
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: -10, deficitAfter: 0, swapped: true });
     s = base();
     s.tricksTaken = [1, 3, 2, 2]; // team 0 has 3
-    expect(scoreRound(s)).toMatchObject({ made: false, delta: 10, deficitAfter: 20 });
+    expect(scoreRound(s)).toMatchObject({ made: false, delta: 5, deficitAfter: 15 });
+    // From 0-0: the hukum side missing its target starts shuffling at 10 down.
+    const zero = base();
+    zero.deficit = 0;
+    zero.tricksTaken = [2, 2, 2, 2];
+    expect(scoreRound(zero)).toMatchObject({
+      delta: -10,
+      deficitAfter: 10,
+      shufflingTeamAfter: 1,
+      swapped: true,
+    });
   });
 
   it('erasing the deficit swaps the shuffling role with overshoot carried', () => {
@@ -191,7 +201,7 @@ describe('scoring the ledger', () => {
     s.deficit = 3;
     s.tricksTaken = [2, 2, 2, 2]; // shuffling team 0 reaches 4
     const r = scoreRound(s);
-    expect(r).toMatchObject({ delta: -5, deficitAfter: 2, shufflingTeamAfter: 1, swapped: true });
+    expect(r).toMatchObject({ delta: -10, deficitAfter: 7, shufflingTeamAfter: 1, swapped: true });
   });
 
   it('six-hand call by the non-shuffling side: +6 made, -12 failed', () => {

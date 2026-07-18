@@ -44,7 +44,7 @@ export class P2PGuest {
         } else if (!channelOpened) {
           reject(
             new Error(
-              'found the room but could not open a connection to the host — a strict network may be blocking it; try again, or put both devices on the same Wi-Fi',
+              'found the room but could not open a connection to the host — try again; open the link in Safari/Chrome (not inside WhatsApp), and if you are on Wi-Fi try mobile data (some routers block device-to-device play)',
             ),
           );
         } else {

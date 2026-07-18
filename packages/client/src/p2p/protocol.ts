@@ -35,29 +35,44 @@ export function peerIdForCode(code: string): string {
 
 /**
  * STUN finds a direct path between the two browsers; the TURN entries are a
- * relay of last resort for strict NATs (mobile carriers, office networks)
- * where no direct path exists — without them, joins from a different network
- * than the host simply time out. Open Relay is a free public TURN service.
+ * relay of last resort for when no direct path exists (strict NATs, Wi-Fi
+ * routers with client isolation, in-app browsers) — without a working relay
+ * those joins simply time out. Several free public relays are listed since
+ * none is perfectly reliable; ICE races them all and uses whatever answers.
+ * A dedicated relay (e.g. a free metered.ca account key, domain-locked) can
+ * be baked in at build time via VITE_TURN_URL/USERNAME/CREDENTIAL and is
+ * tried first.
  */
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:openrelay.metered.ca:80' },
-  {
-    urls: 'turn:openrelay.metered.ca:80',
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
-  {
-    urls: 'turn:openrelay.metered.ca:443',
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
-  {
-    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
-];
+function iceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [];
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_TURN_URL) {
+    servers.push({
+      urls: env.VITE_TURN_URL.split(',').map((u) => u.trim()),
+      username: env.VITE_TURN_USERNAME ?? '',
+      credential: env.VITE_TURN_CREDENTIAL ?? '',
+    });
+  }
+  servers.push(
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: ['turn:freeturn.net:3478', 'turn:freeturn.net:5349'],
+      username: 'free',
+      credential: 'free',
+    },
+  );
+  return servers;
+}
 
 /**
  * Optional self-hosted PeerJS broker via ?srv=host:port (same convention as
@@ -65,7 +80,7 @@ const ICE_SERVERS = [
  * introduces peers — game data flows browser-to-browser (or via TURN relay).
  */
 export function peerOptions(): Record<string, unknown> {
-  const iceConfig = { config: { iceServers: ICE_SERVERS } };
+  const iceConfig = { config: { iceServers: iceServers() } };
   const srv = new URLSearchParams(window.location.search).get('srv');
   if (srv === null) return iceConfig;
   const [host, port] = srv.split(':');

@@ -54,7 +54,9 @@ export function actingSeat(state: LaddisState): Seat | null {
     case 'sixCall':
       return state.window.turn;
     case 'declaring':
-      return nextSeat(state.dealer); // non-shuffling player right of the dealer
+      // A six-caller takes over the hukum; otherwise the non-shuffling
+      // player right of the dealer declares it.
+      return state.six !== null ? state.six.caller : nextSeat(state.dealer);
     case 'playing':
       return state.turn;
     case 'roundOver':
@@ -225,20 +227,33 @@ function sixOrder(s: LaddisState): Seat[] {
 
 function applyDeclareHukum(s: LaddisState, seat: Seat, suit: Suit): void {
   if (s.phase !== 'declaring') fail('not in the declaring phase');
-  if (actingSeat(s) !== seat) fail('only the player right of the dealer declares the hukum');
+  if (actingSeat(s) !== seat) fail('it is not you who declares the hukum');
   s.hukum = { suit, declarer: seat, revealed: false };
+  if (s.six !== null) {
+    // The six-caller owns the round: their hukum, and they lead the first hand.
+    s.phase = 'playing';
+    s.turn = seat;
+    s.trickLeader = seat;
+    return;
+  }
   dealRest(s);
   // Six-call window: everyone may raise to 6 hands — non-shufflers get first go.
   s.phase = 'sixCall';
   s.window = { turn: sixOrder(s)[0]!, passed: [false, false, false, false] };
 }
 
+/**
+ * Calling six discards the declared hukum: the caller re-declares their own
+ * (still hidden) and will lead the first hand once they have.
+ */
 function applyCallSix(s: LaddisState, seat: Seat): void {
   if (s.phase !== 'sixCall') fail('not in the six-call window');
   if (s.window.turn !== seat) fail('not your turn');
   s.mode = 'six';
   s.six = { caller: seat };
-  startPlay(s);
+  s.hukum = null;
+  s.phase = 'declaring';
+  s.window.turn = null;
 }
 
 function applyPassSix(s: LaddisState, seat: Seat): void {

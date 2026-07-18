@@ -60,16 +60,27 @@ describe('round flow', () => {
     expect(s.turn).toBe(1); // right of dealer leads
   });
 
-  it('the shuffling side can also call six', () => {
+  it('a six-caller discards the declared hukum, sets their own and leads', () => {
     let s = fresh();
     s = passVakhaai(s);
     s = applyAction(s, { type: 'declareHukum', seat: 1, suit: 'H' });
     s = applyAction(s, { type: 'passSix', seat: 1 });
     s = applyAction(s, { type: 'passSix', seat: 3 });
-    s = applyAction(s, { type: 'callSix', seat: 2 });
+    s = applyAction(s, { type: 'callSix', seat: 2 }); // shuffling side may call too
     expect(s.mode).toBe('six');
     expect(s.six).toEqual({ caller: 2 });
+    // The old hukum is gone; the caller now declares their own.
+    expect(s.phase).toBe('declaring');
+    expect(s.hukum).toBeNull();
+    expect(actingSeat(s)).toBe(2);
+    expect(() => applyAction(s, { type: 'declareHukum', seat: 1, suit: 'S' })).toThrow(
+      LaddisError, // only the six-caller declares now
+    );
+    s = applyAction(s, { type: 'declareHukum', seat: 2, suit: 'S' });
+    expect(s.hukum).toMatchObject({ suit: 'S', declarer: 2, revealed: false });
     expect(s.phase).toBe('playing');
+    expect(s.turn).toBe(2); // the six-caller leads the first hand
+    expect(s.trickLeader).toBe(2);
   });
 
   it('a vakhaai locks the round: only the 4 dealt cards, no trumps, caller leads', () => {
@@ -233,7 +244,7 @@ describe('scoring the ledger', () => {
     expect(r).toMatchObject({ made: false, delta: -12, deficitAfter: 2, swapped: true });
   });
 
-  it('six-hand call by the shuffling side: -6 made, +12 failed', () => {
+  it('six-hand call by the shuffling side: -6 made, +6 failed', () => {
     let s = base();
     s.mode = 'six';
     s.six = { caller: 0 }; // team 0 is shuffling
@@ -243,7 +254,7 @@ describe('scoring the ledger', () => {
     s.mode = 'six';
     s.six = { caller: 0 };
     s.tricksTaken = [3, 2, 2, 1]; // only 5
-    expect(scoreRound(s)).toMatchObject({ made: false, delta: 12, deficitAfter: 22 });
+    expect(scoreRound(s)).toMatchObject({ made: false, delta: 6, deficitAfter: 16 });
   });
 
   it('vakhaai (4 tricks): the caller alone must take every hand; losses double', () => {

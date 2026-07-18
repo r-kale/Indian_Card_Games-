@@ -17,7 +17,10 @@ export const NORMAL_WIN = 10;
 export const NORMAL_LOSS = 5;
 /** Six-hand call by the non-shuffling side: worth 6, pays 12 on failure. */
 export const SIX_WIN = 6;
-export const SIX_LOSS = 12;
+/** A failed six by the shuffling side costs them 6… */
+export const SIX_LOSS_SHUFFLING = 6;
+/** …but the hukum side failing a six hands the shuffling side 12. */
+export const SIX_LOSS_HUKUM = 12;
 
 export function teamOf(seat: Seat): Team {
   return (seat % 2) as Team;

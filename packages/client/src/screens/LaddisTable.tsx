@@ -279,7 +279,7 @@ function HukumStatus({ view, room }: { view: LaddisView; room: RoomState }) {
       <div className="hukum-panel">
         <div className="hukum-row">
           <span className="hukum-label">Vakhaai</span>
-          <span className="partner-status">no trumps — 4 hands only</span>
+          <span className="partner-status">no trumps — the partner's cards are dead</span>
         </div>
       </div>
     );
@@ -360,8 +360,9 @@ function VakhaaiDialog({
         <h3>Vakhaai?</h3>
         <p className="subtitle">
           Only these <strong>4 cards</strong> are played — 4 hands, <strong>no trumps</strong>,
-          and you lead. You must win <strong>all 4 hands yourself</strong> (your partner's don't
-          count). Win: the bet moves your way. Lose: <strong>double</strong> goes against you.
+          and you lead. You must win <strong>all 4 hands yourself</strong> — your partner's cards
+          are dead and can never take a hand. Win: the bet moves your way. Lose:{' '}
+          <strong>double</strong> goes against you.
         </p>
         <div className="declare-section">
           <div className="declare-label">Bet (kalyas)</div>

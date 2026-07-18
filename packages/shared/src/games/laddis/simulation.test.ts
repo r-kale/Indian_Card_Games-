@@ -35,6 +35,8 @@ describe('laddis bot simulation', () => {
           expect(r.deficitAfter).toBeGreaterThanOrEqual(0);
           if (state.mode === 'vakhaai') {
             expect(state.hukum).toBeNull(); // no trumps in a vakhaai round
+            // The caller's partner is redundant: their cards can never win.
+            expect(state.tricksTaken[(state.vakhaai!.caller + 2) % 4]).toBe(0);
           } else {
             expect(state.hukum!.revealed).toBe(true);
           }

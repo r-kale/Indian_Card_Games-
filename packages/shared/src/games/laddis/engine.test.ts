@@ -87,6 +87,21 @@ describe('round flow', () => {
     expect(legalActions(s, 2 as Seat).every((a) => a.type === 'playCard')).toBe(true);
   });
 
+  it("vakhaai: the caller's partner's cards are dead and never win a hand", () => {
+    let s = fresh();
+    s = applyAction(s, { type: 'passVakhaai', seat: 1 });
+    s = applyAction(s, { type: 'vakhaai', seat: 2, bet: 8 }); // caller 2, partner 0
+    // One-trick showdown: the partner (seat 0) throws the highest card.
+    s.hands = [[c('A', 'S')], [c('7', 'S')], [c('K', 'S')], [c('8', 'S')]];
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('K', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('8', 'S') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') }); // dead card
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
+    // The partner's ace is ignored: the caller's king takes the hand.
+    expect(s.lastTrickWinner).toBe(2);
+    expect(s.tricksTaken[0]).toBe(0);
+  });
+
   it('rejects illegal vakhaai bets', () => {
     const s = fresh();
     expect(() => applyAction(s, { type: 'vakhaai', seat: 1, bet: 10 as never })).toThrow(
@@ -240,7 +255,7 @@ describe('scoring the ledger', () => {
     s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 2, bet: 16 };
-    s.tricksTaken = [0, 1, 3, 0]; // one escaped: vakhaai fails
+    s.tricksTaken = [0, 1, 3, 0]; // an opponent escaped with one: vakhaai fails
     expect(scoreRound(s)).toMatchObject({ made: false, delta: 32, deficitAfter: 42 });
     s = base();
     s.mode = 'vakhaai';
@@ -250,7 +265,7 @@ describe('scoring the ledger', () => {
     s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 1, bet: 8 };
-    s.tricksTaken = [0, 3, 0, 1]; // the caller's own partner stole one — still a fail
+    s.tricksTaken = [2, 3, 0, 0]; // opponents stole one — a fail (partner cards are dead)
     expect(scoreRound(s)).toMatchObject({ made: false, delta: -16, swapped: true, deficitAfter: 6 });
   });
 

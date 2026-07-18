@@ -55,7 +55,7 @@ export function LaddisTable() {
     view.phase === 'vakhaai' || view.phase === 'sixCall'
       ? view.window.turn
       : view.phase === 'declaring'
-        ? (((view.dealer + 1) % 4) as Seat)
+        ? (view.six !== null ? view.six.caller : (((view.dealer + 1) % 4) as Seat))
         : view.turn;
 
   const seatAt = (rel: 1 | 2 | 3): Seat => ((perspective + rel) % 4) as Seat;
@@ -404,8 +404,11 @@ function HukumDialog({
   return (
     <div className="dialog-backdrop">
       <div className="dialog declare">
-        <h3>Set the hidden hukum</h3>
+        <h3>{view.six !== null ? 'You called six — set your hukum' : 'Set the hidden hukum'}</h3>
         <p className="subtitle">
+          {view.six !== null
+            ? 'The six-caller picks the hukum and leads the first hand. '
+            : ''}
           Only you will know the suit until someone void in a trick calls for it.
         </p>
         <div className="suit-row">
@@ -439,8 +442,9 @@ function SixDialog({
         <p className="subtitle">
           Commit your team to <strong>6 of 8 hands</strong>:{' '}
           {view.seat !== null && view.seat % 2 === view.shufflingTeam
-            ? 'succeed and you recover 6 kalyas; fail and your deficit grows by 12.'
-            : 'succeed and the shuffling side pays 6 kalyas; fail and 12 go their way.'}
+            ? 'succeed and you recover 6 kalyas; fail and your deficit grows by 6.'
+            : 'succeed and the shuffling side pays 6 kalyas; fail and 12 go their way.'}{' '}
+          You will pick the hukum and lead the first hand.
         </p>
         <div className="dialog-actions">
           <button onClick={() => onAction({ type: 'passSix', seat })}>Pass</button>

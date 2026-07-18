@@ -1,4 +1,11 @@
-import { NORMAL_LOSS, NORMAL_WIN, SIX_LOSS, SIX_WIN, teamOf } from './types';
+import {
+  NORMAL_LOSS,
+  NORMAL_WIN,
+  SIX_LOSS_HUKUM,
+  SIX_LOSS_SHUFFLING,
+  SIX_WIN,
+  teamOf,
+} from './types';
 import type { LaddisState, RoundResult, Team } from './types';
 
 /**
@@ -26,7 +33,13 @@ export function scoreRound(s: LaddisState): RoundResult {
     attemptingTeam = teamOf(s.six!.caller);
     made = teamTricks[attemptingTeam] >= 6;
     const callerShuffling = attemptingTeam === s.shufflingTeam;
-    delta = callerShuffling ? (made ? -SIX_WIN : SIX_LOSS) : made ? SIX_WIN : -SIX_LOSS;
+    delta = callerShuffling
+      ? made
+        ? -SIX_WIN
+        : SIX_LOSS_SHUFFLING
+      : made
+        ? SIX_WIN
+        : -SIX_LOSS_HUKUM;
   } else {
     attemptingTeam = s.shufflingTeam;
     made = teamTricks[s.shufflingTeam] >= 4;

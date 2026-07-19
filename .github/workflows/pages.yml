@@ -36,11 +36,13 @@ jobs:
           # Socket.IO server to enable online rooms from the Pages site.
           VITE_SERVER_URL: ${{ vars.GAME_SERVER_URL }}
           # Optional dedicated TURN relay for P2P rooms (e.g. a free
-          # metered.ca account, domain-locked): set TURN_URL (comma-separated
-          # turn: urls), TURN_USERNAME and TURN_CREDENTIAL repo variables.
-          VITE_TURN_URL: ${{ vars.TURN_URL }}
-          VITE_TURN_USERNAME: ${{ vars.TURN_USERNAME }}
-          VITE_TURN_CREDENTIAL: ${{ vars.TURN_CREDENTIAL }}
+          # metered.ca account): set TURN_URL (comma-separated turn: urls),
+          # TURN_USERNAME and TURN_CREDENTIAL as repo secrets or variables.
+          # (They end up in the public bundle either way — TURN creds are
+          # never secret from players; the free tier is usage-capped.)
+          VITE_TURN_URL: ${{ secrets.TURN_URL || vars.TURN_URL }}
+          VITE_TURN_USERNAME: ${{ secrets.TURN_USERNAME || vars.TURN_USERNAME }}
+          VITE_TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL || vars.TURN_CREDENTIAL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: packages/client/dist

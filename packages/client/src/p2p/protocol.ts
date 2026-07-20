@@ -43,35 +43,114 @@ export function peerIdForCode(code: string): string {
  * be baked in at build time via VITE_TURN_URL/USERNAME/CREDENTIAL and is
  * tried first.
  */
-function iceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [];
+/** The build-time dedicated relay (VITE_TURN_URL etc.), if configured. */
+function dedicatedTurn(): RTCIceServer | null {
   const env = import.meta.env as Record<string, string | undefined>;
-  if (env.VITE_TURN_URL) {
-    servers.push({
-      urls: env.VITE_TURN_URL.split(',').map((u) => u.trim()),
-      username: env.VITE_TURN_USERNAME ?? '',
-      credential: env.VITE_TURN_CREDENTIAL ?? '',
-    });
+  if (!env.VITE_TURN_URL) return null;
+  return {
+    urls: env.VITE_TURN_URL.split(',').map((u) => u.trim()),
+    username: env.VITE_TURN_USERNAME ?? '',
+    credential: env.VITE_TURN_CREDENTIAL ?? '',
+  };
+}
+
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+      'turn:openrelay.metered.ca:443?transport=tcp',
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: ['turn:freeturn.net:3478', 'turn:freeturn.net:5349'],
+    username: 'free',
+    credential: 'free',
+  },
+];
+
+function iceServers(): RTCIceServer[] {
+  const dedicated = dedicatedTurn();
+  return dedicated === null ? DEFAULT_ICE_SERVERS : [dedicated, ...DEFAULT_ICE_SERVERS];
+}
+
+/** One row of the connection self-test: a single server tested for one role. */
+export interface IceTestTarget {
+  /** Bare hostname, e.g. "global.relay.metered.ca". */
+  label: string;
+  kind: 'STUN' | 'TURN';
+  /** True for the build-time configured relay. */
+  dedicated: boolean;
+  server: RTCIceServer;
+}
+
+function hostOf(url: string): string {
+  const m = /^(?:stun|turns?):([^:?]+)/.exec(url);
+  return m?.[1] ?? url;
+}
+
+/** The self-test targets, in the order ICE would try them. */
+export function iceTestTargets(): IceTestTarget[] {
+  const dedicated = dedicatedTurn();
+  const entries: { server: RTCIceServer; dedicated: boolean }[] = [
+    ...(dedicated === null ? [] : [{ server: dedicated, dedicated: true }]),
+    ...DEFAULT_ICE_SERVERS.map((server) => ({ server, dedicated: false })),
+  ];
+  const targets: IceTestTarget[] = [];
+  for (const { server, dedicated: isDedicated } of entries) {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    for (const kind of ['STUN', 'TURN'] as const) {
+      const ofKind = urls.filter((u) =>
+        kind === 'STUN' ? u.startsWith('stun:') : u.startsWith('turn'),
+      );
+      if (ofKind.length === 0) continue;
+      targets.push({
+        label: hostOf(ofKind[0]!),
+        kind,
+        dedicated: isDedicated,
+        server: { ...server, urls: ofKind },
+      });
+    }
   }
-  servers.push(
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: ['turn:freeturn.net:3478', 'turn:freeturn.net:5349'],
-      username: 'free',
-      credential: 'free',
-    },
-  );
-  return servers;
+  return targets;
+}
+
+/**
+ * Can this device get a candidate of the wanted type from that server?
+ * STUN must yield a server-reflexive candidate; TURN must yield a relay
+ * candidate (the test forces relay-only so nothing else can sneak through).
+ */
+export function testIceTarget(target: IceTestTarget, timeoutMs = 7_000): Promise<boolean> {
+  return new Promise((resolve) => {
+    let pc: RTCPeerConnection;
+    try {
+      pc = new RTCPeerConnection({
+        iceServers: [target.server],
+        iceTransportPolicy: target.kind === 'TURN' ? 'relay' : 'all',
+      });
+    } catch {
+      resolve(false);
+      return;
+    }
+    const wanted = target.kind === 'TURN' ? 'relay' : 'srflx';
+    const finish = (ok: boolean) => {
+      clearTimeout(timer);
+      pc.close();
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    pc.onicecandidate = (e) => {
+      if (e.candidate !== null && e.candidate.candidate.includes(`typ ${wanted}`)) finish(true);
+    };
+    pc.createDataChannel('probe');
+    pc.createOffer()
+      .then((offer) => pc.setLocalDescription(offer))
+      .catch(() => finish(false));
+  });
 }
 
 /**

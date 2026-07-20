@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ConnectionTest } from '../components/ConnectionTest';
 import { loadNickname, useStore } from '../store';
 
 function codeFromHash(): string {
@@ -138,6 +139,8 @@ export function Home() {
           </div>
         </div>
       </div>
+
+      <ConnectionTest />
 
       <div className="rules-note">
         Pick the game in the room lobby — everyone plays the house rules: hidden partners in 304,

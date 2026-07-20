@@ -1084,3 +1084,31 @@ input::placeholder {
   gap: 4px;
   flex-wrap: wrap;
 }
+
+/* Connection self-test */
+.conn-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.conn-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid #ffffff1a;
+}
+.conn-row.conn-head {
+  font-weight: 700;
+  opacity: 0.8;
+}
+.conn-server {
+  word-break: break-all;
+}
+.conn-verdict {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}

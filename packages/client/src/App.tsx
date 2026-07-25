@@ -37,6 +37,9 @@ export function App() {
       {!state.connected && !state.resuming && state.mode === 'online' && state.session !== null && (
         <div className="banner warn">Connection lost — reconnecting…</div>
       )}
+      {state.p2pReconnecting && (
+        <div className="banner warn">Connection to the host lost — reconnecting…</div>
+      )}
       {state.error !== null && (
         <div className="banner error" onClick={clearError}>
           {state.error} <span className="dismiss">✕</span>

@@ -11,7 +11,15 @@ import type {
   RoomState,
   SeatInfo,
 } from '@icg/shared';
-import { HEARTBEAT_MS, P2P_CODE_LENGTH, peerIdForCode, peerOptions } from './protocol';
+import {
+  backoffDelay,
+  HEARTBEAT_MS,
+  HEARTBEAT_TIMEOUT_MS,
+  LOBBY_DISCONNECT_GRACE_MS,
+  P2P_CODE_LENGTH,
+  peerIdForCode,
+  peerOptions,
+} from './protocol';
 import type { GuestToHost, HostToGuest } from './protocol';
 
 
@@ -34,6 +42,8 @@ interface P2PPlayer {
   connected: boolean;
   /** null for the host themself (no data channel to yourself). */
   conn: DataConnection | null;
+  /** Last time we heard anything from them (pongs count). */
+  lastSeen: number;
 }
 
 type SeatEntry = { kind: 'human'; token: string } | { kind: 'bot'; name: string };
@@ -66,6 +76,24 @@ export class P2PHost {
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private destroyed = false;
 
+  private announced = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempt = 0;
+  private readonly onVisibility = () => {
+    if (document.visibilityState !== 'visible' || this.destroyed) return;
+    // Back on screen: heal the broker registration right away and ping the
+    // guests before their resumed watchdogs can misfire.
+    this.reconnectAttempt = 0;
+    this.healBroker();
+    // Our own timers were frozen: silence from guests was expected. Grant
+    // everyone fresh grace before the liveness sweep runs again.
+    const now = Date.now();
+    for (const p of this.players.values()) p.lastSeen = now;
+    this.pingAll();
+    this.broadcast();
+  };
+  private readonly lobbyGrace = new Map<string, ReturnType<typeof setTimeout>>();
+
   constructor(
     hostNickname: string,
     private readonly cb: HostCallbacks,
@@ -76,25 +104,98 @@ export class P2PHost {
       nickname: hostNickname.trim().slice(0, 24) || 'Host',
       connected: true,
       conn: null,
+      lastSeen: Date.now(),
     });
+    this.openPeer();
+    document.addEventListener('visibilitychange', this.onVisibility);
+    this.heartbeat = setInterval(() => this.pingAll(), HEARTBEAT_MS);
+  }
+
+  /**
+   * Register (or re-register) the room's deterministic peer id with the
+   * broker. Re-runnable: backgrounded mobile tabs drop the broker socket and
+   * PeerJS may even destroy the peer on fatal errors — the id derives from
+   * the room code, so a fresh Peer resurrects the same room.
+   */
+  private openPeer(): void {
     const peer = new Peer(peerIdForCode(this.code), peerOptions());
     this.peer = peer;
     peer.on('open', () => {
-      peer.off('error');
-      peer.on('error', (e) => console.warn('[p2p host]', e));
-      this.cb.onReady(this.code);
+      this.reconnectAttempt = 0;
+      if (this.reconnectTimer !== null) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      if (!this.announced) {
+        this.announced = true;
+        this.cb.onReady(this.code);
+      }
       this.broadcast();
     });
     peer.on('error', (e) => {
-      this.destroy();
-      this.cb.onFatal(`Could not open a P2P room: ${e.type}`);
-    });
-    peer.on('connection', (conn) => this.onConnection(conn));
-    this.heartbeat = setInterval(() => {
-      for (const p of this.players.values()) {
-        if (p.conn?.open === true) send(p.conn, { t: 'ping' });
+      if (!this.announced) {
+        // Could not open the room at all: give up loudly.
+        this.destroy();
+        this.cb.onFatal(`Could not open a P2P room: ${e.type}`);
+        return;
       }
-    }, HEARTBEAT_MS);
+      console.warn('[p2p host]', e);
+      // Fatal errors destroy the peer; schedule a full re-registration.
+      if (peer.destroyed) this.scheduleReconnect();
+    });
+    // Broker socket lost (backgrounding, network switch): re-register the id.
+    peer.on('disconnected', () => this.scheduleReconnect());
+    peer.on('connection', (conn) => this.onConnection(conn));
+  }
+
+  /** Re-register with the broker after a backoff; existing data channels live on. */
+  private scheduleReconnect(): void {
+    if (this.destroyed || this.reconnectTimer !== null) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.destroyed) return;
+      this.reconnectAttempt++;
+      this.healBroker();
+    }, backoffDelay(this.reconnectAttempt));
+  }
+
+  private healBroker(): void {
+    const peer = this.peer;
+    if (peer === null) return;
+    try {
+      if (peer.destroyed) {
+        this.openPeer();
+      } else if (peer.disconnected) {
+        peer.reconnect();
+      }
+    } catch (err) {
+      console.warn('[p2p host] broker reconnect failed:', err);
+      try {
+        peer.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.openPeer();
+    }
+  }
+
+  private pingAll(): void {
+    const now = Date.now();
+    for (const p of this.players.values()) {
+      if (p.conn?.open === true) {
+        send(p.conn, { t: 'ping' });
+        // WebRTC close events can lag by minutes when a phone dies; a guest
+        // that stopped answering pings is gone even if the channel looks open.
+        if (p.connected && now - p.lastSeen > HEARTBEAT_TIMEOUT_MS) {
+          try {
+            p.conn.close();
+          } catch {
+            /* ignore */
+          }
+          this.onGuestGone(p.token);
+        }
+      }
+    }
   }
 
   // ---- guest connections --------------------------------------------------
@@ -104,6 +205,10 @@ export class P2PHost {
     conn.on('data', (raw) => {
       const msg = raw as GuestToHost;
       try {
+        if (token !== null) {
+          const p = this.players.get(token);
+          if (p !== undefined) p.lastSeen = Date.now();
+        }
         if (msg.t === 'hello') {
           token = this.onHello(conn, msg);
         } else if (token !== null) {
@@ -116,21 +221,39 @@ export class P2PHost {
         });
       }
     });
-    conn.on('close', () => {
-      if (token !== null) this.onGuestGone(token);
-    });
-    conn.on('error', () => {
-      if (token !== null) this.onGuestGone(token);
-    });
+    // Only treat the drop as "guest gone" if this is still their live
+    // connection — a reclaimed guest's zombie conn closing must not evict
+    // the fresh one.
+    const goneIfCurrent = () => {
+      if (token !== null && this.players.get(token)?.conn === conn) {
+        this.onGuestGone(token);
+      }
+    };
+    conn.on('close', goneIfCurrent);
+    conn.on('error', goneIfCurrent);
   }
 
   private onHello(conn: DataConnection, msg: Extract<GuestToHost, { t: 'hello' }>): string {
-    // Returning guest (page reload): the stored token reclaims their identity.
+    // Returning guest (reload / reconnect): the stored token reclaims their
+    // identity — even over a zombie connection whose close never fired.
     if (msg.token !== undefined) {
       const existing = this.players.get(msg.token);
-      if (existing !== undefined && existing.conn?.open !== true) {
+      if (existing !== undefined) {
+        if (existing.conn !== null && existing.conn !== conn) {
+          try {
+            existing.conn.close();
+          } catch {
+            /* ignore */
+          }
+        }
+        const grace = this.lobbyGrace.get(msg.token);
+        if (grace !== undefined) {
+          clearTimeout(grace);
+          this.lobbyGrace.delete(msg.token);
+        }
         existing.conn = conn;
         existing.connected = true;
+        existing.lastSeen = Date.now();
         send(conn, { t: 'welcome', playerId: existing.id, token: existing.token });
         this.broadcast();
         this.sendGameTo(existing);
@@ -138,7 +261,8 @@ export class P2PHost {
         return existing.token;
       }
     }
-    if (this.players.size > MAX_GUESTS) {
+    const connectedCount = [...this.players.values()].filter((p) => p.connected).length;
+    if (connectedCount > MAX_GUESTS) {
       send(conn, { t: 'rejected', reason: 'room is full (8 players max)' });
       conn.close();
       throw new Error('room full');
@@ -149,6 +273,7 @@ export class P2PHost {
       nickname: msg.nickname.trim().slice(0, 24) || 'Player',
       connected: true,
       conn,
+      lastSeen: Date.now(),
     };
     this.players.set(player.token, player);
     send(conn, { t: 'welcome', playerId: player.id, token: player.token });
@@ -178,10 +303,20 @@ export class P2PHost {
     if (player === undefined) return;
     player.connected = false;
     player.conn = null;
-    if (this.phase === 'lobby') {
-      const seat = this.seatOf(token);
-      if (seat !== null) this.seats[seat] = null;
-      this.players.delete(token);
+    if (this.phase === 'lobby' && !this.lobbyGrace.has(token)) {
+      // Hold the seat for a while — backgrounded phones drop and come back.
+      this.lobbyGrace.set(
+        token,
+        setTimeout(() => {
+          this.lobbyGrace.delete(token);
+          const p = this.players.get(token);
+          if (p === undefined || p.connected) return;
+          const seat = this.seatOf(token);
+          if (seat !== null && this.phase === 'lobby') this.seats[seat] = null;
+          this.players.delete(token);
+          this.broadcast();
+        }, LOBBY_DISCONNECT_GRACE_MS),
+      );
     }
     this.broadcast();
     this.reschedule();
@@ -428,6 +563,11 @@ export class P2PHost {
     this.clearTimer();
     if (this.heartbeat !== null) clearInterval(this.heartbeat);
     this.heartbeat = null;
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    for (const t of this.lobbyGrace.values()) clearTimeout(t);
+    this.lobbyGrace.clear();
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.peer?.destroy();
     this.peer = null;
   }

@@ -24,12 +24,31 @@ export function Lobby() {
   const isHost = room.hostId === me;
   const mySeat = room.seats.findIndex((s) => s?.playerId === me);
 
+  const inviteUrl = `${window.location.origin}${window.location.pathname}#/${room.code}`;
+  const [showUrl, setShowUrl] = useState(false);
+
   const copyCode = () => {
-    const url = `${window.location.origin}${window.location.pathname}#/${room.code}`;
-    void navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    try {
+      navigator.clipboard
+        .writeText(inviteUrl)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        })
+        .catch(() => setShowUrl(true));
+    } catch {
+      // Clipboard unavailable (some in-app browsers): show the link instead.
+      setShowUrl(true);
+    }
+  };
+
+  // The native share sheet keeps the game tab alive — no app-switching needed.
+  const shareInvite = () => {
+    navigator
+      .share({ title: 'Indian Card Games', text: `Join my game — room ${room.code}`, url: inviteUrl })
+      .catch(() => {
+        /* user cancelled the sheet */
+      });
   };
 
   const seatCard = (entry: SeatInfo | null, seat: number, className: string) => (
@@ -79,10 +98,21 @@ export function Lobby() {
         <button className="room-code" onClick={copyCode} title="Copy invite link">
           {room.code} {copied ? '✓ copied' : '⧉'}
         </button>
+        {typeof navigator.share === 'function' && (
+          <button onClick={shareInvite}>Share invite</button>
+        )}
         <button className="link" onClick={leaveRoom}>
           Leave room
         </button>
       </div>
+      {showUrl && (
+        <input
+          className="invite-url"
+          readOnly
+          value={inviteUrl}
+          onFocus={(e) => e.target.select()}
+        />
+      )}
 
       <div className="game-picker">
         {(Object.keys(GAME_NAMES) as GameId[]).map((g) =>
@@ -107,7 +137,8 @@ export function Lobby() {
       <p className="subtitle">{GAME_BLURB[room.gameId]}</p>
       {state.mode === 'p2pHost' && (
         <p className="subtitle p2p-note">
-          ⚡ P2P room — your browser is running the game. Keep this tab open.
+          ⚡ P2P room — your browser is running the game. Keep this tab open; switching apps
+          briefly is OK, the room reconnects when you come back.
         </p>
       )}
       {state.mode === 'p2pGuest' && (

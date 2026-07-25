@@ -1112,3 +1112,10 @@ input::placeholder {
   font-size: 13px;
   font-weight: 600;
 }
+
+.invite-url {
+  width: 100%;
+  max-width: 480px;
+  font-size: 13px;
+  letter-spacing: normal;
+}

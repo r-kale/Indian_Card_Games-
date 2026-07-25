@@ -9,7 +9,9 @@ export type GuestToHost =
   | { t: 'hello'; nickname: string; token?: string }
   | { t: 'takeSeat'; seat: number }
   | { t: 'leaveSeat' }
-  | { t: 'action'; action: GameAction };
+  | { t: 'action'; action: GameAction }
+  /** Reply to the host's ping — the host's only proof a silent guest is alive. */
+  | { t: 'pong' };
 
 export type HostToGuest =
   | { t: 'welcome'; playerId: string; token: string }
@@ -25,6 +27,18 @@ export type HostToGuest =
  *  take minutes to fire when a tab dies). */
 export const HEARTBEAT_MS = 5_000;
 export const HEARTBEAT_TIMEOUT_MS = 15_000;
+
+/** Backoff between broker-reconnect / re-dial attempts (later attempts stay at the last step). */
+export const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000] as const;
+/** Full re-dial attempts a dropped guest makes before giving up to the home screen. */
+export const GUEST_REDIAL_ATTEMPTS = 4;
+/** How long a lobby seat is held for a disconnected guest (backgrounded phones). */
+export const LOBBY_DISCONNECT_GRACE_MS = 180_000;
+
+export function backoffDelay(attempt: number): number {
+  const i = Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1);
+  return RECONNECT_BACKOFF_MS[i]!;
+}
 
 export const P2P_CODE_LENGTH = 6;
 

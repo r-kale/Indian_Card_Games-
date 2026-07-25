@@ -31,6 +31,8 @@ export interface AppState {
   view: GameView | null;
   toasts: Toast[];
   error: string | null;
+  /** True while a dropped P2P guest connection is auto re-dialing. */
+  p2pReconnecting: boolean;
 }
 
 type AppAction =
@@ -44,17 +46,19 @@ type AppAction =
   | { type: 'error'; error: string | null }
   | { type: 'localStarted'; session: Session; roomState: RoomState }
   | { type: 'p2pStarted'; mode: 'p2pHost' | 'p2pGuest'; session: Session }
+  | { type: 'p2pReconnecting'; value: boolean }
   | { type: 'leftRoom' };
 
 const initial: AppState = {
   connected: false,
   mode: 'online',
   session: null,
-  resuming: loadSession() !== null,
+  resuming: loadSession() !== null || loadP2PSession() !== null,
   roomState: null,
   view: null,
   toasts: [],
   error: null,
+  p2pReconnecting: false,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -90,13 +94,48 @@ function reducer(state: AppState, action: AppAction): AppState {
       };
     case 'p2pStarted':
       return { ...state, mode: action.mode, session: action.session, error: null };
+    case 'p2pReconnecting':
+      return { ...state, p2pReconnecting: action.value };
     case 'leftRoom':
-      return { ...state, mode: 'online', session: null, roomState: null, view: null };
+      return {
+        ...state,
+        mode: 'online',
+        session: null,
+        roomState: null,
+        view: null,
+        p2pReconnecting: false,
+      };
   }
 }
 
 const SESSION_KEY = 'icg.session';
 const NICKNAME_KEY = 'icg.nickname';
+/** Guest P2P session (sessionStorage: per-tab, survives reloads). */
+const P2P_SESSION_KEY = 'icg.p2pSession';
+
+interface P2PSession extends Session {
+  nickname: string;
+}
+
+function loadP2PSession(): P2PSession | null {
+  try {
+    const raw = sessionStorage.getItem(P2P_SESSION_KEY);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw) as P2PSession;
+    return typeof parsed.roomCode === 'string' && typeof parsed.token === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveP2PSession(session: P2PSession | null): void {
+  try {
+    if (session === null) sessionStorage.removeItem(P2P_SESSION_KEY);
+    else sessionStorage.setItem(P2P_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    /* private-mode storage failures are non-fatal */
+  }
+}
 
 function loadSession(): Session | null {
   try {
@@ -182,7 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           dispatch({ type: 'resuming', resuming: false });
         });
-      } else {
+      } else if (loadP2PSession() === null) {
         dispatch({ type: 'resuming', resuming: false });
       }
     };
@@ -217,13 +256,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     p2pGuest.current = null;
   };
 
-  const joinP2P = (code: string, nickname: string) => {
+  const joinP2P = (code: string, nickname: string, token?: string) => {
     const guest = new P2PGuest({
       onRoom: setRoomState,
       onView: (view) => dispatch({ type: 'view', view }),
       onEvent: notifyEvent,
       onError: fail,
+      onReconnecting: () => dispatch({ type: 'p2pReconnecting', value: true }),
+      onReconnected: () => dispatch({ type: 'p2pReconnecting', value: false }),
       onClosed: (reason) => {
+        saveP2PSession(null);
+        dispatch({ type: 'p2pReconnecting', value: false });
         fail(reason);
         p2pGuest.current?.destroy();
         p2pGuest.current = null;
@@ -233,20 +276,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     p2pGuest.current?.destroy();
     p2pGuest.current = guest;
     guest
-      .connect(code, nickname)
-      .then(({ playerId, token }) => {
+      .connect(code, nickname, token)
+      .then(({ playerId, token: newToken }) => {
+        saveP2PSession({ roomCode: code, token: newToken, playerId, nickname });
         dispatch({
           type: 'p2pStarted',
           mode: 'p2pGuest',
-          session: { roomCode: code, token, playerId },
+          session: { roomCode: code, token: newToken, playerId },
         });
+        dispatch({ type: 'resuming', resuming: false });
       })
       .catch((err: Error) => {
         guest.destroy();
         if (p2pGuest.current === guest) p2pGuest.current = null;
+        saveP2PSession(null);
         fail(err.message);
+        dispatch({ type: 'resuming', resuming: false });
       });
   };
+
+  // Auto-rejoin a stored P2P session on page load (guest reloads, tab
+  // restores). The "Reconnecting…" screen shows until it settles.
+  useEffect(() => {
+    const stored = loadP2PSession();
+    if (stored !== null) joinP2P(stored.roomCode, stored.nickname, stored.token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Run a host-room call, surfacing rule violations as banner errors. */
   const hostOp = (fn: (host: P2PHost) => void) => {
@@ -273,10 +328,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const code = roomCode.trim().toUpperCase();
       // Try the game server first when it's reachable; otherwise (or if it
       // doesn't know the code) the code may belong to a P2P host browser.
+      const storedP2P = loadP2PSession();
+      const reclaimToken = storedP2P?.roomCode === code ? storedP2P.token : undefined;
       if (socket.connected) {
         socket.emit('room:join', { roomCode: code, nickname }, (res) => {
           if (!res.ok) {
-            joinP2P(code, nickname);
+            joinP2P(code, nickname, reclaimToken);
             return;
           }
           const session = { roomCode: code, token: res.token, playerId: res.playerId };
@@ -284,11 +341,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           dispatch({ type: 'session', session });
         });
       } else {
-        joinP2P(code, nickname);
+        joinP2P(code, nickname, reclaimToken);
       }
     },
     hostP2PRoom: (nickname) => {
       saveNickname(nickname);
+      saveP2PSession(null);
       destroyP2P();
       const host = new P2PHost(nickname, {
         onReady: (code) => {
@@ -336,6 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       if (p2pHost.current !== null || p2pGuest.current !== null) {
         destroyP2P();
+        saveP2PSession(null);
         dispatch({ type: 'leftRoom' });
         return;
       }

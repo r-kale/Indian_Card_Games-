@@ -87,6 +87,11 @@ export interface LaddisState {
   six: { caller: Seat } | null;
   /** Seat that called for the hukum this trick and must play it if able. */
   mustPlayHukum: Seat | null;
+  /** How many cards of the current trick were already down when the hukum was
+   *  called. Those earlier cards were played against a secret hukum and stay
+   *  plain; only plays from the call onward carry trump power. Null once the
+   *  trick resolves (from the next trick every hukum card is trump). */
+  hukumCallIndex: number | null;
   turn: Seat | null;
   trick: TrickPlay[];
   trickLeader: Seat;

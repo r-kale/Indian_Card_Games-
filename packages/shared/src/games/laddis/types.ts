@@ -20,6 +20,10 @@ export const SIX_WIN = 6;
 export const SIX_LOSS_SHUFFLING = 6;
 /** …but the hukum side failing a six hands the shuffling side 12. */
 export const SIX_LOSS_HUKUM = 12;
+/** One ladu. The same member of the shuffling team deals for as long as the
+ *  deficit stays inside the same 32-kalya block; crossing a multiple of 32
+ *  (in either direction) passes the deal to their partner. */
+export const LADU_KALYAS = 32;
 
 export function teamOf(seat: Seat): Team {
   return (seat % 2) as Team;

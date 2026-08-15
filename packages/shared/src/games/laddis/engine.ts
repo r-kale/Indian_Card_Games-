@@ -92,8 +92,8 @@ export function legalActions(state: LaddisState, seat: Seat): LaddisAction[] {
       ];
     }
     case 'playing': {
-      // Once the round's outcome is already decided (a vakhaai caller missed
-      // a hand, or a side reached its target), anyone may end it early.
+      // Once the round's outcome is already decided (an opponent broke a
+      // vakhaai, or a side reached its target), anyone may end it early.
       if (roundDecided(state)) actions.push({ type: 'endRound', seat });
       if (state.turn !== seat) return actions;
       for (const card of legalPlays(state, seat)) actions.push({ type: 'playCard', seat, card });
@@ -285,7 +285,7 @@ function applyCallHukum(s: LaddisState, seat: Seat): void {
 
 /**
  * Is the round's result already beyond doubt?
- * - vakhaai: the caller (who needs all 4 hands) has missed one;
+ * - vakhaai: an opponent has taken a hand (the dead partner's hands break nothing);
  * - six-call: the callers reached 6, or their opponents reached 3;
  * - normal: the shuffling side reached 4, or the hukum side reached 5.
  */
@@ -294,7 +294,8 @@ export function roundDecided(s: LaddisState): boolean {
     s.tricksTaken[team] + s.tricksTaken[(team + 2) as Seat];
   if (s.mode === 'vakhaai') {
     const caller = s.vakhaai!.caller;
-    return s.tricksTaken.some((t, seat) => seat !== caller && t > 0);
+    const partner = partnerOf(caller);
+    return s.tricksTaken.some((t, seat) => seat !== caller && seat !== partner && t > 0);
   }
   if (s.mode === 'six') {
     const attacking = teamOf(s.six!.caller);
@@ -330,13 +331,10 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
 
   if (s.trick.length === 4) {
     const trumpSuit = s.hukum !== null && s.hukum.revealed ? s.hukum.suit : null;
-    // In a vakhaai round the caller's partner is redundant: their card goes
-    // into the middle like everyone's but can never win the hand.
-    const counted =
-      s.mode === 'vakhaai'
-        ? s.trick.filter((p) => p.seat !== partnerOf(s.vakhaai!.caller))
-        : s.trick;
-    const winner = trickWinner(counted, RANK_ORDER_STANDARD, trumpSuit) as Seat;
+    // In a vakhaai round the caller's partner is redundant: a hand their card
+    // tops is simply dead — it neither makes the vakhaai (only opponents being
+    // shut out does) nor breaks it. They still collect it and lead the next.
+    const winner = trickWinner(s.trick, RANK_ORDER_STANDARD, trumpSuit) as Seat;
     s.tricksTaken[winner] += 1;
     s.lastTrick = s.trick;
     s.lastTrickWinner = winner;

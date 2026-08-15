@@ -98,7 +98,7 @@ describe('round flow', () => {
     expect(legalActions(s, 2 as Seat).every((a) => a.type === 'playCard')).toBe(true);
   });
 
-  it("vakhaai: the caller's partner's cards are dead and never win a hand", () => {
+  it("vakhaai: a hand topped by the caller's partner is dead — it breaks nothing", () => {
     let s = fresh();
     s = applyAction(s, { type: 'passVakhaai', seat: 1 });
     s = applyAction(s, { type: 'vakhaai', seat: 2, bet: 8 }); // caller 2, partner 0
@@ -108,9 +108,12 @@ describe('round flow', () => {
     s = applyAction(s, { type: 'playCard', seat: 3, card: c('8', 'S') });
     s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') }); // dead card
     s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
-    // The partner's ace is ignored: the caller's king takes the hand.
-    expect(s.lastTrickWinner).toBe(2);
-    expect(s.tricksTaken[0]).toBe(0);
+    // The partner collects the hand, but it counts for nobody: the vakhaai
+    // still stands because no opponent took a hand.
+    expect(s.lastTrickWinner).toBe(0);
+    expect(s.tricksTaken[0]).toBe(1);
+    expect(s.phase).toBe('roundOver');
+    expect(s.roundResult).toMatchObject({ mode: 'vakhaai', made: true });
   });
 
   it('rejects illegal vakhaai bets', () => {
@@ -257,11 +260,16 @@ describe('scoring the ledger', () => {
     expect(scoreRound(s)).toMatchObject({ made: false, delta: 6, deficitAfter: 16 });
   });
 
-  it('vakhaai (4 tricks): the caller alone must take every hand; losses double', () => {
+  it('vakhaai (4 tricks): lost only when an opponent takes a hand; losses double', () => {
     let s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 2, bet: 16 }; // caller on the shuffling team
     s.tricksTaken = [0, 0, 4, 0]; // all four hands
+    expect(scoreRound(s)).toMatchObject({ made: true, delta: -16, deficitAfter: 6, swapped: true });
+    s = base();
+    s.mode = 'vakhaai';
+    s.vakhaai = { caller: 2, bet: 16 };
+    s.tricksTaken = [1, 0, 3, 0]; // the dead partner topped one: still made
     expect(scoreRound(s)).toMatchObject({ made: true, delta: -16, deficitAfter: 6, swapped: true });
     s = base();
     s.mode = 'vakhaai';
@@ -276,7 +284,7 @@ describe('scoring the ledger', () => {
     s = base();
     s.mode = 'vakhaai';
     s.vakhaai = { caller: 1, bet: 8 };
-    s.tricksTaken = [2, 3, 0, 0]; // opponents stole one — a fail (partner cards are dead)
+    s.tricksTaken = [2, 3, 0, 0]; // an opponent (seat 0) stole two — a fail
     expect(scoreRound(s)).toMatchObject({ made: false, delta: -16, swapped: true, deficitAfter: 6 });
   });
 
@@ -306,12 +314,15 @@ describe('scoring the ledger', () => {
     expect(over.phase).toBe('roundOver');
     expect(over.roundResult).toMatchObject({ made: true, delta: -10 });
     expect(over.hukum!.revealed).toBe(true); // showdown
-    // Vakhaai: the caller missing a single hand decides the round at once.
+    // Vakhaai: an opponent taking a single hand decides the round at once —
+    // but a hand collected by the caller's (dead) partner decides nothing.
     let v = fresh();
     v = applyAction(v, { type: 'passVakhaai', seat: 1 });
     v = applyAction(v, { type: 'vakhaai', seat: 2, bet: 16 });
     expect(legalActions(v, 2).some((a) => a.type === 'endRound')).toBe(false);
-    v.tricksTaken = [1, 0, 0, 0]; // someone other than the caller took a hand
+    v.tricksTaken = [1, 0, 0, 0]; // only the partner (seat 0) has one: still open
+    expect(legalActions(v, 0).some((a) => a.type === 'endRound')).toBe(false);
+    v.tricksTaken = [1, 1, 0, 0]; // an opponent took a hand: broken
     expect(legalActions(v, 0).some((a) => a.type === 'endRound')).toBe(true);
     const vOver = applyAction(v, { type: 'endRound', seat: 0 });
     expect(vOver.phase).toBe('roundOver');

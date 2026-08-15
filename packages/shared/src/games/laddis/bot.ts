@@ -85,6 +85,11 @@ function choosePlay(view: LaddisView, actions: readonly LaddisAction[], rng: Rng
   if (callHukum !== undefined && shouldCallHukum(view, rng)) return callHukum;
   if (plays.length === 1) return plays[0]!;
 
+  // The vakhaai caller's partner is dead weight: just discard low cards.
+  if (view.mode === 'vakhaai' && view.vakhaai !== null && me === partnerOf(view.vakhaai.caller)) {
+    return weakest(plays);
+  }
+
   if (view.trick.length === 0) return strongest(plays);
 
   const winnerSoFar = trickWinner(view.trick, RANK_ORDER_STANDARD, trumpSuit) as Seat;

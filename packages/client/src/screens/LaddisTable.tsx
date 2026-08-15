@@ -315,7 +315,7 @@ function LaddisScorePanel({ view, room }: { view: LaddisView; room: RoomState })
   ];
   const target = (team: 0 | 1): string => {
     if (view.mode === 'vakhaai' && view.vakhaai !== null) {
-      return team === view.vakhaai.caller % 2 ? 'caller needs all 4' : 'stop the caller';
+      return team === view.vakhaai.caller % 2 ? 'lose no hand to them' : 'win a hand to break it';
     }
     if (view.mode === 'six') {
       return team === view.shufflingTeam ? 'needs 3' : 'needs 6';

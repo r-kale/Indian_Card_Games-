@@ -37,6 +37,7 @@ export function initRound(config: RoundConfig): LaddisState {
     vakhaai: null,
     six: null,
     mustPlayHukum: null,
+    hukumCallIndex: null,
     turn: null,
     trick: [],
     trickLeader: nextSeat(config.dealer),
@@ -281,6 +282,7 @@ function applyCallHukum(s: LaddisState, seat: Seat): void {
   }
   hukum.revealed = true;
   s.mustPlayHukum = seat;
+  s.hukumCallIndex = s.trick.length;
 }
 
 /**
@@ -331,15 +333,31 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
 
   if (s.trick.length === 4) {
     const trumpSuit = s.hukum !== null && s.hukum.revealed ? s.hukum.suit : null;
+    // Hukum cards put down before the call were played against a secret hukum
+    // and stay plain; only plays from the call onward count as trump. From the
+    // next trick on (hukumCallIndex null) every hukum card is trump.
+    const trumpPlays =
+      trumpSuit === null
+        ? []
+        : s.trick.filter(
+            (p, i) =>
+              p.card.suit === trumpSuit &&
+              (s.hukumCallIndex === null || i >= s.hukumCallIndex),
+          );
     // In a vakhaai round the caller's partner is redundant: a hand their card
     // tops is simply dead — it neither makes the vakhaai (only opponents being
     // shut out does) nor breaks it. They collect it, but the caller keeps the
     // lead.
-    const winner = trickWinner(s.trick, RANK_ORDER_STANDARD, trumpSuit) as Seat;
+    const winner = (
+      trumpPlays.length > 0
+        ? trickWinner(trumpPlays, RANK_ORDER_STANDARD, trumpSuit)
+        : trickWinner(s.trick, RANK_ORDER_STANDARD, null)
+    ) as Seat;
     s.tricksTaken[winner] += 1;
     s.lastTrick = s.trick;
     s.lastTrickWinner = winner;
     s.trick = [];
+    s.hukumCallIndex = null;
     const leader =
       s.mode === 'vakhaai' && winner === partnerOf(s.vakhaai!.caller)
         ? s.vakhaai!.caller

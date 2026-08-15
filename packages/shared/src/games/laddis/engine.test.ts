@@ -209,6 +209,33 @@ describe('playing', () => {
     const plays = legalActions(s, 3 as Seat).filter((a) => a.type === 'playCard');
     expect(plays).toEqual([{ type: 'playCard', seat: 3, card: c('7', 'H') }]);
   });
+
+  it('a hukum card thrown before the call stays plain — only plays after it are trump', () => {
+    let s = endgame();
+    s.hands = [
+      [c('9', 'S'), c('8', 'D')],
+      [c('8', 'S'), c('7', 'D')],
+      [c('K', 'H'), c('Q', 'D')],
+      [c('7', 'H'), c('J', 'D')],
+    ];
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('8', 'S') });
+    // Seat 2 is void in spades and quietly throws the K♥ — the hukum is still
+    // secret, so it goes down as an ordinary card.
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('K', 'H') });
+    // Seat 3 (also void) calls for the hukum and must play their heart.
+    s = applyAction(s, { type: 'callHukum', seat: 3 });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('7', 'H') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('9', 'S') });
+    // The 7♥ played after the call is trump; the earlier K♥ is not.
+    expect(s.lastTrickWinner).toBe(3);
+    // From the next trick every heart is live trump again… but nobody has one
+    // left here; the led diamond decides.
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('J', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('8', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('Q', 'D') });
+    expect(s.lastTrickWinner).toBe(2);
+  });
 });
 
 describe('scoring the ledger', () => {

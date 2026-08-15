@@ -25,8 +25,10 @@ export function scoreRound(s: LaddisState): RoundResult {
   if (s.mode === 'vakhaai') {
     const { caller, bet } = s.vakhaai!;
     attemptingTeam = teamOf(caller);
-    // Only 4 tricks exist in a vakhaai round: the caller must take them all.
-    made = s.tricksTaken[caller] >= 4;
+    // Only 4 tricks exist in a vakhaai round. Hands topped by the caller's
+    // (dead) partner count for nobody, so the vakhaai stands unless an
+    // opponent takes a hand.
+    made = teamTricks[(1 - attemptingTeam) as Team] === 0;
     const callerShuffling = attemptingTeam === s.shufflingTeam;
     delta = callerShuffling ? (made ? -bet : 2 * bet) : made ? bet : -2 * bet;
   } else if (s.mode === 'six') {

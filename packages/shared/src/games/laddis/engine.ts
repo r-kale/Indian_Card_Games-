@@ -3,7 +3,7 @@ import type { Card, Suit } from '../../core/cards';
 import { makeRng, shuffle } from '../../core/rng';
 import { legalFollows, ledSuit, trickWinner } from '../../core/tricks';
 import { scoreRound } from './scoring';
-import { LaddisError, nextSeat, partnerOf, teamOf, VAKHAAI_BETS } from './types';
+import { LADU_KALYAS, LaddisError, nextSeat, partnerOf, teamOf, VAKHAAI_BETS } from './types';
 import type { LaddisAction, LaddisState, Seat, Team, VakhaaiBet } from './types';
 
 export interface RoundConfig {
@@ -361,10 +361,16 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
 function applyNextRound(s: LaddisState): LaddisState {
   if (s.phase !== 'roundOver') fail('the round is not over');
   const r = s.roundResult!;
-  // Dealer stays within the (possibly new) shuffling team, alternating members.
+  // The same member of the shuffling team keeps dealing while the deficit
+  // stays inside its 32-kalya block; crossing a multiple of 32 (either way)
+  // passes the deal to their partner. A role swap crosses to the adjacent
+  // seat, which belongs to the other (now shuffling) team.
+  const block = (deficit: number) => Math.floor(deficit / LADU_KALYAS);
   const dealer = r.swapped
-    ? nextSeat(s.dealer) // adjacent seat belongs to the other (now shuffling) team
-    : partnerOf(s.dealer);
+    ? nextSeat(s.dealer)
+    : block(s.deficit) === block(r.deficitAfter)
+      ? s.dealer
+      : partnerOf(s.dealer);
   return initRound({
     deficit: r.deficitAfter,
     shufflingTeam: r.shufflingTeamAfter,

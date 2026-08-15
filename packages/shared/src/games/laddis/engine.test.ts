@@ -341,6 +341,40 @@ describe('scoring the ledger', () => {
     expect(vOver.roundResult).toMatchObject({ mode: 'vakhaai', made: false, delta: 32 });
   });
 
+  it('the deal stays with one partner until the deficit crosses a multiple of 32', () => {
+    const roundOver = (dealer: Seat, deficitBefore: number, deficitAfter: number): LaddisState => {
+      const s = initRound({ deficit: deficitBefore, shufflingTeam: 0, dealer, seed: 't', roundNumber: 1 });
+      s.phase = 'roundOver';
+      s.roundResult = {
+        mode: 'normal',
+        made: deficitAfter < deficitBefore,
+        attemptingTeam: 0,
+        vakhaai: null,
+        six: null,
+        teamTricks: [0, 0],
+        delta: deficitAfter - deficitBefore,
+        deficitAfter,
+        shufflingTeamAfter: 0,
+        swapped: false,
+      };
+      return s;
+    };
+    // Same 32-block (10 → 15): the same player deals again.
+    expect(applyAction(roundOver(0, 10, 15), { type: 'nextRound', seat: 0 }).dealer).toBe(0);
+    // Crossing 32 upward (28 → 38): the partner takes over.
+    expect(applyAction(roundOver(0, 28, 38), { type: 'nextRound', seat: 0 }).dealer).toBe(2);
+    // Landing exactly on 32 counts as crossed.
+    expect(applyAction(roundOver(2, 27, 32), { type: 'nextRound', seat: 0 }).dealer).toBe(0);
+    // Recovering back across 32 (38 → 28) passes it back too.
+    expect(applyAction(roundOver(2, 38, 28), { type: 'nextRound', seat: 0 }).dealer).toBe(0);
+    // Within the higher block (40 → 50): no change.
+    expect(applyAction(roundOver(2, 40, 50), { type: 'nextRound', seat: 0 }).dealer).toBe(2);
+    // A role swap still crosses the deal to the adjacent seat of the new team.
+    const sw = roundOver(0, 5, 0);
+    sw.roundResult = { ...sw.roundResult!, deficitAfter: 5, shufflingTeamAfter: 1, swapped: true };
+    expect(applyAction(sw, { type: 'nextRound', seat: 0 }).dealer).toBe(1);
+  });
+
   it('the host can end the match at any point; the ledger stands', () => {
     // Mid-play: a side that is clearly lost can concede without finishing the round.
     let s = fresh();

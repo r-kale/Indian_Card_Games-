@@ -102,16 +102,28 @@ describe('round flow', () => {
     let s = fresh();
     s = applyAction(s, { type: 'passVakhaai', seat: 1 });
     s = applyAction(s, { type: 'vakhaai', seat: 2, bet: 8 }); // caller 2, partner 0
-    // One-trick showdown: the partner (seat 0) throws the highest card.
-    s.hands = [[c('A', 'S')], [c('7', 'S')], [c('K', 'S')], [c('8', 'S')]];
+    // The partner (seat 0) throws the highest card of the first hand.
+    s.hands = [
+      [c('A', 'S'), c('9', 'D')],
+      [c('7', 'S'), c('10', 'D')],
+      [c('K', 'S'), c('A', 'D')],
+      [c('8', 'S'), c('J', 'D')],
+    ];
     s = applyAction(s, { type: 'playCard', seat: 2, card: c('K', 'S') });
     s = applyAction(s, { type: 'playCard', seat: 3, card: c('8', 'S') });
     s = applyAction(s, { type: 'playCard', seat: 0, card: c('A', 'S') }); // dead card
     s = applyAction(s, { type: 'playCard', seat: 1, card: c('7', 'S') });
-    // The partner collects the hand, but it counts for nobody: the vakhaai
-    // still stands because no opponent took a hand.
+    // The partner collects the hand, but it counts for nobody and the CALLER
+    // keeps the lead.
     expect(s.lastTrickWinner).toBe(0);
     expect(s.tricksTaken[0]).toBe(1);
+    expect(s.turn).toBe(2);
+    expect(s.trickLeader).toBe(2);
+    // Play out the last hand: no opponent ever took one, so the vakhaai stands.
+    s = applyAction(s, { type: 'playCard', seat: 2, card: c('A', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 3, card: c('J', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 0, card: c('9', 'D') });
+    s = applyAction(s, { type: 'playCard', seat: 1, card: c('10', 'D') });
     expect(s.phase).toBe('roundOver');
     expect(s.roundResult).toMatchObject({ mode: 'vakhaai', made: true });
   });

@@ -333,14 +333,19 @@ function applyPlayCard(s: LaddisState, seat: Seat, card: Card): void {
     const trumpSuit = s.hukum !== null && s.hukum.revealed ? s.hukum.suit : null;
     // In a vakhaai round the caller's partner is redundant: a hand their card
     // tops is simply dead — it neither makes the vakhaai (only opponents being
-    // shut out does) nor breaks it. They still collect it and lead the next.
+    // shut out does) nor breaks it. They collect it, but the caller keeps the
+    // lead.
     const winner = trickWinner(s.trick, RANK_ORDER_STANDARD, trumpSuit) as Seat;
     s.tricksTaken[winner] += 1;
     s.lastTrick = s.trick;
     s.lastTrickWinner = winner;
     s.trick = [];
-    s.trickLeader = winner;
-    s.turn = winner;
+    const leader =
+      s.mode === 'vakhaai' && winner === partnerOf(s.vakhaai!.caller)
+        ? s.vakhaai!.caller
+        : winner;
+    s.trickLeader = leader;
+    s.turn = leader;
   } else {
     s.turn = nextSeat(seat);
   }
